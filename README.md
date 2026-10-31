@@ -2,7 +2,7 @@
 
 A quiet, precise speedcubing timer. WCA scrambles, 15-second inspection, real averages and session stats — all saved in your browser, no account required.
 
-[**Live demo →**](https://example.com)
+[**Live demo →**](https://pbtimer.vercel.app)
 
 ![pbtimer running a 3×3 session](docs/screenshot.png)
 
