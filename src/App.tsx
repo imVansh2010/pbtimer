@@ -467,31 +467,26 @@ export default function App() {
       >
         {/* On a phone the timer owns the first screen, with the top of the side
             panel peeking out as a hint that there is more below. */}
-        <section className="@container flex min-h-[calc(100svh-6.5rem)] flex-col sm:min-h-[calc(100svh-7rem)] lg:min-h-0 lg:overflow-y-auto">
+        <section className="@container grid min-h-[calc(100svh-6.5rem)] grid-cols-1 grid-rows-[1fr_auto_1fr] sm:min-h-[calc(100svh-7rem)] lg:min-h-0 lg:overflow-y-auto">
           <ScrambleBar
             scramble={scramble}
             loading={loading}
             puzzleLabel={puzzleById(puzzle).label}
             onNext={nextScramble}
             dimmed={focusing}
+            className="col-start-1 row-start-1 self-start"
           />
 
-          {/* The digits centre themselves in this box, so the padding has to be
-              symmetric for them to sit in the middle of the space between the
-              scramble and the hint. Extra bottom padding used to lift them,
-              which is why the gap below the timer read wider than the one above. */}
-          {/* The net is anchored to the bottom corner, outside the flow, so on a
-              phone the digits would centre against the page and land on top of
-              it. Padding the column by the net's height makes the digits centre
-              in the space that is actually free above it. */}
-          <div
-            className={cn(
-              "relative flex flex-1 items-center justify-center px-3 pt-2 sm:px-4 sm:pt-5",
-              // From lg the net sits beside the hint rather than under the
-              // digits, so the inset stays symmetric there.
-              netAvailable && showNet ? "pb-[7rem] lg:pb-5" : "pb-2 sm:pb-5",
-            )}
-          >
+          {/* The stage is three rows: the scramble, the digits, the hint. The two
+              outer rows share the leftover height equally, so the digits land in
+              the middle of the screen however tall the scramble is. Centring them
+              in the space left under the scramble instead pulled the timer down
+              with the scramble — a 7×7 or a wrapped 4×4 moved the digits 45px —
+              which is why no single padding value ever sat right. Equal rows also
+              keep the digits clear of the scramble: when the scramble is too tall
+              for its half, that row grows to fit it and pushes the digits down
+              instead of letting them land behind the text. */}
+          <div className="col-start-1 row-start-2 flex items-center justify-center px-3 py-2 sm:px-4">
             <div
               role="presentation"
               onPointerDown={(event) => {
@@ -514,7 +509,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="relative flex flex-col items-center pb-2 sm:pb-5">
+          <div className="relative col-start-1 row-start-3 flex flex-col items-center self-end pb-2 sm:pb-5">
             {/* Above the hint on phones, anchored to the bottom corner on wider
                 screens where there is room beside the hint. The toggle shares
                 the same 16px left/bottom inset as the net so the block reads as

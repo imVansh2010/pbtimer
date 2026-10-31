@@ -11,6 +11,7 @@ interface ScrambleBarProps {
   onNext: () => void;
   /** Fades the block back while the timer is being armed or inspected. */
   dimmed?: boolean;
+  className?: string;
 }
 
 export const ScrambleBar = memo(function ScrambleBar({
@@ -19,6 +20,7 @@ export const ScrambleBar = memo(function ScrambleBar({
   puzzleLabel,
   onNext,
   dimmed = false,
+  className,
 }: ScrambleBarProps) {
   const [copied, setCopied] = useState(false);
 
@@ -59,6 +61,7 @@ export const ScrambleBar = memo(function ScrambleBar({
       className={cn(
         "px-3 pt-3 transition-opacity duration-200 sm:px-6 sm:pt-5",
         dimmed && "pointer-events-none opacity-[0.12]",
+        className,
       )}
     >
       <div className={cn("mx-auto w-full", width)}>
