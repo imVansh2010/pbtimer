@@ -102,6 +102,11 @@ export function TimerDisplay({
           // Inter at 400: proportional-pitch digits with tabular figures, no
           // slashed zero, and a touch more weight than a mono hairline.
           "relative text-center font-sans font-normal leading-[0.9] tracking-[-0.045em] tabular-nums",
+          // Letter-spacing is also applied after the final digit, so the layout
+          // box ends up narrower than the glyphs by the tracking amount and the
+          // whole number drifts right of centre. The right padding hands that
+          // trailing space back, which centres the ink instead of the box.
+          "pr-[0.045em]",
           // Container width sets the size, but a short window (a phone held in
           // landscape) caps it by height so the digits can never outgrow the screen.
           "transition-[color,scale] duration-150 ease-out",
