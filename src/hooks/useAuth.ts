@@ -36,6 +36,18 @@ function authMessage(message: string): string {
   }
   if (text.includes("signups not allowed")) return "New accounts are disabled for this project.";
   if (text.includes("provider is not enabled")) return "That sign-in method isn't enabled yet.";
+  if (text.includes("email address not authorized")) {
+    return "Email delivery isn't set up for this site yet — use Google sign-in instead.";
+  }
+  if (text.includes("link is invalid or has expired") || text.includes("token has expired")) {
+    return "That link has expired. Ask for a new one.";
+  }
+  if (text.includes("auth session missing")) {
+    return "Open the link from your email again to finish.";
+  }
+  if (text.includes("should be different from the old")) {
+    return "Pick a password you haven't used here before.";
+  }
   return message;
 }
 
@@ -43,6 +55,8 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(!cloudEnabled);
   const [busy, setBusy] = useState(false);
+  /** True between a password-reset link landing and the new password being set. */
+  const [recovery, setRecovery] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -59,7 +73,8 @@ export function useAuth() {
         if (active) setReady(true);
       });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
       setSession(next);
       setReady(true);
     });
@@ -158,11 +173,38 @@ export function useAuth() {
     [withBusy],
   );
 
+  const resetPassword = useCallback(
+    (email: string) =>
+      withBusy(async () => {
+        if (!supabase) return { error: NOT_CONFIGURED };
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: redirectUrl(),
+        });
+        return error
+          ? { error: authMessage(error.message) }
+          : { notice: "Check your inbox for a link to set a new password." };
+      }),
+    [withBusy],
+  );
+
+  const updatePassword = useCallback(
+    (password: string) =>
+      withBusy(async () => {
+        if (!supabase) return { error: NOT_CONFIGURED };
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) return { error: authMessage(error.message) };
+        setRecovery(false);
+        return {};
+      }),
+    [withBusy],
+  );
+
   const signOut = useCallback(
     () =>
       withBusy(async () => {
         if (!supabase) return {};
         const { error } = await supabase.auth.signOut();
+        if (!error) setRecovery(false);
         return error ? { error: authMessage(error.message) } : {};
       }),
     [withBusy],
@@ -179,9 +221,12 @@ export function useAuth() {
     userId: user?.id ?? null,
     email: user?.email ?? "",
     name,
+    recovery,
     signIn,
     signUp,
     sendMagicLink,
+    resetPassword,
+    updatePassword,
     signInWithGoogle,
     signOut,
   };

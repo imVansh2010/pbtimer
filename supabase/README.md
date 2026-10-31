@@ -1,6 +1,7 @@
 # Account sync
 
-The timer works completely without this. `.env.local` holding the project URL and
+The account UI is currently removed from the app (see the top-level README); this page is the
+setup to finish before switching it back on. The timer works completely without it. `.env.local` holding the project URL and
 anon key is what turns the sign-in button in the header on; with those values
 empty, the account UI stays hidden and nothing ever leaves the browser.
 

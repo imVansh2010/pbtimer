@@ -140,7 +140,7 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           </p>
           <p>
             The .json backup next to it restores everything on another device, dates included;
-            Import merges one back in and syncs it if you are signed in.
+            Import merges one back in.
           </p>
         </Section>
 
@@ -150,10 +150,8 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
             works with no account and no connection.
           </p>
           <p>
-            Signing in from the header is optional: it copies the same data to your account and
-            keeps other signed-in devices in step. Signing out leaves the local copy untouched.
-            Clearing site data, or Reset in the solves panel, deletes the local copy for good —
-            export first if you want to keep one.
+            Nothing is uploaded anywhere. Clearing site data, or Reset in the solves panel, deletes
+            the local copy for good — export first if you want to keep one.
           </p>
         </Section>
 

@@ -48,7 +48,9 @@ export function AuthDialog({ open, onClose, auth }: AuthDialogProps) {
   const [reveal, setReveal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pending, setPending] = useState<"password" | "google" | "magic" | null>(null);
+  const [pending, setPending] = useState<"password" | "google" | "magic" | "reset" | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   // A fresh dialog should never show the last attempt's message.
   useEffect(() => {
@@ -57,6 +59,8 @@ export function AuthDialog({ open, onClose, auth }: AuthDialogProps) {
     setNotice(null);
     setPending(null);
     setPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
     setReveal(false);
   }, [open]);
 
@@ -83,6 +87,41 @@ export function AuthDialog({ open, onClose, auth }: AuthDialogProps) {
     if (outcome.error) setError(outcome.error);
     else if (outcome.notice) setNotice(outcome.notice);
     else if (mode === "signin") onClose();
+  }
+
+  async function savePassword(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setError(null);
+    setNotice(null);
+    if (newPassword.length < 8) {
+      setError("Use at least 8 characters for the password.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Those passwords don't match.");
+      return;
+    }
+    setPending("password");
+    const outcome = await auth.updatePassword(newPassword);
+    setPending(null);
+    if (outcome.error) setError(outcome.error);
+    else onClose();
+  }
+
+  async function forgotPassword() {
+    if (busy) return;
+    setError(null);
+    setNotice(null);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Add your email first, then ask for the reset link.");
+      return;
+    }
+    setPending("reset");
+    const outcome = await auth.resetPassword(email);
+    setPending(null);
+    if (outcome.error) setError(outcome.error);
+    else if (outcome.notice) setNotice(outcome.notice);
   }
 
   async function magicLink() {
@@ -114,102 +153,172 @@ export function AuthDialog({ open, onClose, auth }: AuthDialogProps) {
     <Modal
       open={open}
       onClose={onClose}
-      title={mode === "signin" ? "Sign in to sync" : "Create your account"}
-      description="Your solves and settings, on every device you use."
+      title={
+        auth.recovery
+          ? "Set a new password"
+          : mode === "signin"
+            ? "Sign in to sync"
+            : "Create your account"
+      }
+      description={
+        auth.recovery
+          ? "Choose a new password to finish resetting the one you forgot."
+          : "Your solves and settings, on every device you use."
+      }
       size="sm"
     >
       <div className="space-y-3.5">
-        <Button variant="outline" size="md" className="w-full" onClick={google} disabled={busy}>
-          {pending === "google" ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <GoogleMark />
-          )}
-          Continue with Google
-        </Button>
-
-        <div className="flex items-center gap-2.5" aria-hidden="true">
-          <span className="h-px flex-1 bg-white/[0.07]" />
-          <span className="text-[9.5px] uppercase tracking-[0.16em] text-faint">or</span>
-          <span className="h-px flex-1 bg-white/[0.07]" />
-        </div>
-
-        <form onSubmit={submit} className="space-y-2.5" noValidate>
-          <div>
-            <label htmlFor="auth-email" className="mb-1 block text-[11px] text-muted">
-              Email
-            </label>
-            <input
-              id="auth-email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              spellCheck={false}
-              autoCapitalize="none"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="auth-password" className="mb-1 block text-[11px] text-muted">
-              Password
-            </label>
-            <div className="relative">
+        {auth.recovery ? (
+          <form onSubmit={savePassword} className="space-y-2.5" noValidate>
+            <div>
+              <label htmlFor="auth-new-password" className="mb-1 block text-[11px] text-muted">
+                New password
+              </label>
               <input
-                id="auth-password"
-                type={reveal ? "text" : "password"}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className={cn(fieldClass, "pr-10")}
+                id="auth-new-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="At least 8 characters"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                className={fieldClass}
               />
-              <button
-                type="button"
-                onClick={() => setReveal((value) => !value)}
-                aria-label={reveal ? "Hide password" : "Show password"}
-                aria-pressed={reveal}
-                className="absolute right-0 top-0 grid h-full w-10 cursor-pointer place-items-center text-faint transition-colors hover:text-chalk pointer-coarse:w-11"
-              >
-                {reveal ? (
-                  <EyeOff className="size-4" aria-hidden="true" />
-                ) : (
-                  <Eye className="size-4" aria-hidden="true" />
-                )}
-              </button>
             </div>
-          </div>
 
-          <Button
-            type="submit"
-            variant="primary"
-            size="md"
-            className="w-full"
-            disabled={!canSubmit}
-          >
-            {pending === "password" ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : null}
-            {mode === "signin" ? "Sign in" : "Create account"}
-          </Button>
-        </form>
+            <div>
+              <label htmlFor="auth-confirm-password" className="mb-1 block text-[11px] text-muted">
+                Confirm password
+              </label>
+              <input
+                id="auth-confirm-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Repeat the password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className={fieldClass}
+              />
+            </div>
 
-        <button
-          type="button"
-          onClick={magicLink}
-          disabled={busy}
-          className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-[11.5px] text-muted transition-colors hover:bg-white/[0.04] hover:text-chalk disabled:pointer-events-none disabled:opacity-40 pointer-coarse:py-2.5"
-        >
-          {pending === "magic" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <Mail className="size-3.5" aria-hidden="true" />
-          )}
-          Email me a sign-in link
-        </button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              className="w-full"
+              disabled={newPassword.length === 0 || confirmPassword.length === 0 || busy}
+            >
+              {pending === "password" ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              Save password
+            </Button>
+          </form>
+        ) : (
+          <>
+            <Button variant="outline" size="md" className="w-full" onClick={google} disabled={busy}>
+              {pending === "google" ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <GoogleMark />
+              )}
+              Continue with Google
+            </Button>
+
+            <div className="flex items-center gap-2.5" aria-hidden="true">
+              <span className="h-px flex-1 bg-white/[0.07]" />
+              <span className="text-[9.5px] uppercase tracking-[0.16em] text-faint">or</span>
+              <span className="h-px flex-1 bg-white/[0.07]" />
+            </div>
+
+            <form onSubmit={submit} className="space-y-2.5" noValidate>
+              <div>
+                <label htmlFor="auth-email" className="mb-1 block text-[11px] text-muted">
+                  Email
+                </label>
+                <input
+                  id="auth-email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className={fieldClass}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="auth-password" className="mb-1 block text-[11px] text-muted">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="auth-password"
+                    type={reveal ? "text" : "password"}
+                    autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                    placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className={cn(fieldClass, "pr-10")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setReveal((value) => !value)}
+                    aria-label={reveal ? "Hide password" : "Show password"}
+                    aria-pressed={reveal}
+                    className="absolute right-0 top-0 grid h-full w-10 cursor-pointer place-items-center text-faint transition-colors hover:text-chalk pointer-coarse:w-11"
+                  >
+                    {reveal ? (
+                      <EyeOff className="size-4" aria-hidden="true" />
+                    ) : (
+                      <Eye className="size-4" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={forgotPassword}
+                  disabled={busy}
+                  className="cursor-pointer rounded text-[11px] text-faint transition-colors hover:text-chalk disabled:pointer-events-none disabled:opacity-40"
+                >
+                  {pending === "reset" ? "Sending…" : "Forgot your password?"}
+                </button>
+              </div>
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                className="w-full"
+                disabled={!canSubmit}
+              >
+                {pending === "password" ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : null}
+                {mode === "signin" ? "Sign in" : "Create account"}
+              </Button>
+            </form>
+
+            <button
+              type="button"
+              onClick={magicLink}
+              disabled={busy}
+              className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-[11.5px] text-muted transition-colors hover:bg-white/[0.04] hover:text-chalk disabled:pointer-events-none disabled:opacity-40 pointer-coarse:py-2.5"
+            >
+              {pending === "magic" ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Mail className="size-3.5" aria-hidden="true" />
+              )}
+              Email me a sign-in link
+            </button>
+          </>
+        )}
 
         {error ? (
           <p
@@ -228,24 +337,28 @@ export function AuthDialog({ open, onClose, auth }: AuthDialogProps) {
           </p>
         ) : null}
 
-        <p className="text-center text-[11.5px] text-faint">
-          {mode === "signin" ? "New here?" : "Already have an account?"}{" "}
-          <button
-            type="button"
-            onClick={() => {
-              setMode(mode === "signin" ? "signup" : "signin");
-              setError(null);
-              setNotice(null);
-            }}
-            className="cursor-pointer font-medium text-accent transition-colors hover:text-accent-strong"
-          >
-            {mode === "signin" ? "Create an account" : "Sign in"}
-          </button>
-        </p>
+        {auth.recovery ? null : (
+          <p className="text-center text-[11.5px] text-faint">
+            {mode === "signin" ? "New here?" : "Already have an account?"}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError(null);
+                setNotice(null);
+              }}
+              className="cursor-pointer font-medium text-accent transition-colors hover:text-accent-strong"
+            >
+              {mode === "signin" ? "Create an account" : "Sign in"}
+            </button>
+          </p>
+        )}
 
-        <p className="text-center text-[10.5px] leading-4 text-faint/80">
-          No account needed — everything still saves in this browser.
-        </p>
+        {auth.recovery ? null : (
+          <p className="text-center text-[10.5px] leading-4 text-faint/80">
+            No account needed — everything still saves in this browser.
+          </p>
+        )}
       </div>
     </Modal>
   );

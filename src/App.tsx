@@ -30,8 +30,6 @@ import { StatsDialog } from "./components/dialogs/StatsDialog";
 import { ExportDialog } from "./components/dialogs/ExportDialog";
 import { ConfirmDialog } from "./components/dialogs/ConfirmDialog";
 import { HelpDialog } from "./components/dialogs/HelpDialog";
-import { AuthDialog } from "./components/dialogs/AuthDialog";
-import { AccountMenu } from "./components/AccountMenu";
 import { useScramble } from "./hooks/useScramble";
 import { useTimer } from "./hooks/useTimer";
 import { useAuth } from "./hooks/useAuth";
@@ -73,7 +71,7 @@ function clampPanel(value: number): number {
   return Math.round(Math.min(max, Math.max(PANEL_MIN, value)));
 }
 
-type DialogId = "settings" | "stats" | "export" | "reset" | "help" | "auth" | null;
+type DialogId = "settings" | "stats" | "export" | "reset" | "help" | null;
 
 function isSolve(value: unknown): value is Solve {
   if (typeof value !== "object" || value === null) return false;
@@ -452,12 +450,6 @@ export default function App() {
           <IconButton label="Settings" onClick={() => openDialog("settings")} disabled={running}>
             <SettingsIcon className="size-4" aria-hidden="true" />
           </IconButton>
-          {auth.cloudEnabled ? (
-            <>
-              <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-white/[0.07] sm:block" />
-              <AccountMenu auth={auth} sync={sync} onOpenAuth={() => openDialog("auth")} />
-            </>
-          ) : null}
         </div>
       </header>
 
@@ -628,8 +620,6 @@ export default function App() {
       />
 
       <HelpDialog open={dialog === "help"} onClose={() => setDialog(null)} />
-
-      <AuthDialog open={dialog === "auth"} onClose={() => setDialog(null)} auth={auth} />
 
       <ConfirmDialog
         open={dialog === "reset"}

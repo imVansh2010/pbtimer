@@ -287,13 +287,12 @@ export function SettingsDialog({
             <p className="mt-4 text-[13px] leading-[1.6] text-faint">
               <strong className="font-medium text-chalk-dim">Export log</strong> writes a readable
               .txt; <strong className="font-medium text-chalk-dim">Back up</strong> writes a .json
-              that restores everything — dates included. Import merges a backup into this browser
-              and syncs it to your account if you are signed in.
+              that restores everything — dates included. Import merges a backup into this browser.
             </p>
             <p className="mt-2.5 text-[13px] leading-[1.6] text-faint">
-              Without an account, solves, settings and the selected puzzle live in this browser only
-              and nothing is uploaded. Sign in from the header to sync them across devices. Back up
-              regularly either way, because clearing site data deletes the local copy for good.
+              Solves, settings and the selected puzzle live in this browser only and nothing is
+              uploaded. Back up regularly, because clearing site data deletes the local copy for
+              good.
             </p>
           </section>
         ) : null}

@@ -17,11 +17,11 @@ A quiet, precise speedcubing timer. WCA scrambles, 15-second inspection, real av
 - **Full solve history** — every solve stores its scramble; apply +2 / DNF or delete in one click.
 - **Keyboard-first** — space to time, `N` for a new scramble, `2` / `D` for penalties, `Del` to remove.
 - **Export and backup** — readable text log, JSON backup and import that merges without duplicates.
-- **Optional sync** — sign in to keep devices in step via Supabase; everything still works offline.
+- **Local-first** — solves, settings and the selected puzzle live in your browser; no account, no uploads.
 
 ## Tech Stack
 
-React 19 · TypeScript · Vite 6 · Tailwind CSS v4 · cubing.js (scrambles) · Supabase (optional auth & sync) · lucide-react
+React 19 · TypeScript · Vite 6 · Tailwind CSS v4 · cubing.js (scrambles) · lucide-react · Supabase (account sync, currently not exposed in the UI)
 
 ## Getting Started
 
@@ -41,15 +41,11 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173).
 
-### Optional: account sync
+### Account sync (not currently enabled)
 
-The timer runs fully local by default. To enable sign-in and multi-device sync, add your Supabase credentials:
+The timer runs fully local: solves, settings and the selected puzzle are stored in this browser and nothing is uploaded. The app once had an optional sign-in for multi-device sync; that UI is removed for now, while the Supabase setup is unfinished.
 
-```bash
-cp .env.example .env.local
-```
-
-Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`, then apply the schema in [`supabase/migrations`](supabase/migrations). Setup details are in [`supabase/README.md`](supabase/README.md).
+The code has been kept so it can be switched back on: `src/hooks/useAuth.ts`, `src/hooks/useCloudSync.ts`, `src/lib/supabase.ts`, the account components in `src/components/`, and the schema in [`supabase/migrations`](supabase/migrations). Re-enabling it means restoring the account menu in the header in `src/App.tsx` and the sign-in dialog, setting `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (see `.env.example`), and finishing the provider setup described in [`supabase/README.md`](supabase/README.md).
 
 ### Production build
 
