@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#0b0b10" />
+  <g fill="none" stroke="#050507" stroke-width="0.06">
+    <!-- top face: U -->
+    <g transform="matrix(13 -7.5 13 7.5 3 9.5)" fill="#f1f1f6">
+      <rect x="0.06" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.06" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.06" y="0.727" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.727" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.727" width="0.213" height="0.213" rx="0.05" />
+    </g>
+    <!-- left face: F -->
+    <g transform="matrix(13 7.5 0 15 3 9.5)" fill="#2fbf86">
+      <rect x="0.06" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.06" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.06" y="0.727" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.727" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.727" width="0.213" height="0.213" rx="0.05" />
+    </g>
+    <!-- right face: R -->
+    <g transform="matrix(13 -7.5 0 15 16 17)" fill="#e05a5a">
+      <rect x="0.06" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.06" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.06" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.393" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.06" y="0.727" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.393" y="0.727" width="0.213" height="0.213" rx="0.05" />
+      <rect x="0.727" y="0.727" width="0.213" height="0.213" rx="0.05" />
+    </g>
+  </g>
+</svg>
