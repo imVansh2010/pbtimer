@@ -476,18 +476,20 @@ export default function App() {
             dimmed={focusing}
           />
 
-          {/* The bottom padding lifts the digits off the optical sag caused by the
-              scramble block being taller than the hint beneath them. It is
-              viewport-relative so a landscape phone still keeps the hint on
-              screen, while a desktop window keeps its tuned 72px. */}
+          {/* The digits centre themselves in this box, so the padding has to be
+              symmetric for them to sit in the middle of the space between the
+              scramble and the hint. Extra bottom padding used to lift them,
+              which is why the gap below the timer read wider than the one above. */}
           {/* The net is anchored to the bottom corner, outside the flow, so on a
               phone the digits would centre against the page and land on top of
               it. Padding the column by the net's height makes the digits centre
               in the space that is actually free above it. */}
           <div
             className={cn(
-              "relative flex flex-1 items-center justify-center px-3 pt-2 sm:px-4 sm:pt-5 sm:pb-[clamp(1.5rem,9svh,4.5rem)] lg:pb-18",
-              netAvailable && showNet ? "pb-[7rem]" : "pb-2",
+              "relative flex flex-1 items-center justify-center px-3 pt-2 sm:px-4 sm:pt-5",
+              // From lg the net sits beside the hint rather than under the
+              // digits, so the inset stays symmetric there.
+              netAvailable && showNet ? "pb-[7rem] lg:pb-5" : "pb-2 sm:pb-5",
             )}
           >
             <div
