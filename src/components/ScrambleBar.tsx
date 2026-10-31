@@ -38,17 +38,17 @@ export const ScrambleBar = memo(function ScrambleBar({
 
   // 4×4 and up, Megaminx and Square-1 produce scrambles several times the
   // length of a 3×3's, which used to wrap into a tall stack and shove the timer
-  // down the page. Those get a wider column and a step down in type size, so
-  // they spread out instead of growing taller. Keyed off character count rather
-  // than the puzzle id so imported or unusual scrambles adapt the same way.
+  // down the page. Those step down in type size so they spread out instead of
+  // growing taller. Keyed off character count rather than the puzzle id so
+  // imported or unusual scrambles adapt the same way.
   const length = scramble.length;
   const density: "base" | "long" | "dense" = length > 170 ? "dense" : length > 90 ? "long" : "base";
 
-  const width = {
-    base: "max-w-3xl",
-    long: "max-w-4xl",
-    dense: "max-w-5xl",
-  }[density];
+  // The box takes the width of the timer column, up to 64rem. A 3×3 scramble is
+  // about 737px of type at this size, so the old 3xl (768px box, 726px of room)
+  // wrapped the longest ones by a hair while the column sat half empty beside
+  // it. The cap only exists to stop the box sprawling on a wide monitor.
+  const width = "max-w-[64rem]";
 
   const type = {
     base: "text-[19.5px] leading-[1.5] sm:text-[24.5px] sm:leading-[1.55]",
