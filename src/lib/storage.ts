@@ -12,6 +12,10 @@ export const STORAGE_KEYS = {
   sync: "pbtimer.sync.v1",
   /** Solves set aside when a different account signs in on this browser. */
   previousSolves: "pbtimer.solves.previous.v1",
+  /** Every session, for every event. */
+  sessions: "pbtimer.sessions.v1",
+  /** Which session is open, per event id. */
+  activeSessions: "pbtimer.activeSessions.v1",
 } as const;
 
 /** Keys used before the rename, read once so no existing session is lost. */

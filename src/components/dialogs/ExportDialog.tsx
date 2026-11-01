@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, Download } from "lucide-react";
+import { Check, Copy, Download, FileJson } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { copyText, downloadText, exportFilename } from "../../lib/export";
@@ -9,9 +9,19 @@ interface ExportDialogProps {
   onClose: () => void;
   text: string;
   solveCount: number;
+  sessionCount: number;
+  /** Downloads the full backup, sessions and all. */
+  onBackup: () => void;
 }
 
-export function ExportDialog({ open, onClose, text, solveCount }: ExportDialogProps) {
+export function ExportDialog({
+  open,
+  onClose,
+  text,
+  solveCount,
+  sessionCount,
+  onBackup,
+}: ExportDialogProps) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -29,7 +39,9 @@ export function ExportDialog({ open, onClose, text, solveCount }: ExportDialogPr
       open={open}
       onClose={onClose}
       title="Export solves"
-      description={`${solveCount} solve${solveCount === 1 ? "" : "s"} as a plain-text log.`}
+      description={`${solveCount} solve${solveCount === 1 ? "" : "s"} across ${sessionCount} session${
+        sessionCount === 1 ? "" : "s"
+      } — a readable log that can be imported back as new sessions.`}
       size="lg"
       footer={
         <>
@@ -51,6 +63,10 @@ export function ExportDialog({ open, onClose, text, solveCount }: ExportDialogPr
               <Copy className="size-3.5" aria-hidden="true" />
             )}
             {copied ? "Copied" : "Copy"}
+          </Button>{" "}
+          <Button variant="outline" size="md" onClick={onBackup}>
+            <FileJson className="size-3.5" aria-hidden="true" />
+            Backup .json
           </Button>
           <Button
             variant="primary"

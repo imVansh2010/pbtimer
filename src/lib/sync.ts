@@ -101,6 +101,9 @@ export function sanitizeSolve(value: unknown): Solve | null {
     typeof input.updatedAt === "number" && Number.isFinite(input.updatedAt)
       ? input.updatedAt
       : undefined;
+  // Sessions are local, so this is only kept when it is a well-formed id; an
+  // unknown value must not end up in the solve list.
+  const sessionId = isUuid(input.sessionId) ? input.sessionId : undefined;
 
   return {
     id,
@@ -110,6 +113,7 @@ export function sanitizeSolve(value: unknown): Solve | null {
     puzzle: input.puzzle,
     date: input.date,
     ...(updatedAt === undefined ? {} : { updatedAt }),
+    ...(sessionId === undefined ? {} : { sessionId }),
   };
 }
 
@@ -124,17 +128,15 @@ export interface SolveMerge {
   merged: Solve[];
   /** Solves whose local copy is newer than the cloud copy. */
   upload: Solve[];
-  /** Ids deleted locally that the cloud still holds. */
-  deleteIds: string[];
 }
 
 export function mergeSolves(local: Solve[], remote: RemoteSolve[]): SolveMerge {
   const remoteById = new Map<string, RemoteSolve>();
   for (const entry of remote) remoteById.set(entry.solve.id, entry);
 
+  const localIds = new Set(local.map((solve) => solve.id));
   const merged = new Map<string, Solve>();
   const upload: Solve[] = [];
-  const deleteIds: string[] = [];
 
   for (const solve of local) {
     const match = remoteById.get(solve.id);
@@ -149,22 +151,25 @@ export function mergeSolves(local: Solve[], remote: RemoteSolve[]): SolveMerge {
       merged.set(solve.id, solve);
       upload.push(solve);
     } else {
-      merged.set(solve.id, match.solve);
+      // The cloud row has no session column, so the local session id is the only
+      // copy of that link. Keeping it here stops a sync from emptying a session.
+      merged.set(
+        solve.id,
+        solve.sessionId ? { ...match.solve, sessionId: solve.sessionId } : match.solve,
+      );
     }
   }
 
   for (const entry of remote) {
     const { id } = entry.solve;
-    if (merged.has(id)) continue;
+    if (merged.has(id) || localIds.has(id)) continue;
     if (entry.deletedAt != null) continue;
-    if (local.some((solve) => solve.id === id)) continue;
     merged.set(id, entry.solve);
   }
 
   return {
     merged: [...merged.values()].sort((a, b) => b.date - a.date),
     upload,
-    deleteIds,
   };
 }
 

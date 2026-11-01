@@ -9,8 +9,6 @@ interface ScrambleBarProps {
   loading: boolean;
   puzzleLabel: string;
   onNext: () => void;
-  /** Fades the block back while the timer is being armed or inspected. */
-  dimmed?: boolean;
   className?: string;
 }
 
@@ -19,7 +17,6 @@ export const ScrambleBar = memo(function ScrambleBar({
   loading,
   puzzleLabel,
   onNext,
-  dimmed = false,
   className,
 }: ScrambleBarProps) {
   const [copied, setCopied] = useState(false);
@@ -51,19 +48,13 @@ export const ScrambleBar = memo(function ScrambleBar({
   const width = "max-w-[64rem]";
 
   const type = {
-    base: "text-[19.5px] leading-[1.5] sm:text-[24.5px] sm:leading-[1.55]",
-    long: "text-[17.5px] leading-[1.45] sm:text-[21.5px] sm:leading-[1.5]",
-    dense: "text-[15.5px] leading-[1.4] sm:text-[18.5px] sm:leading-[1.45]",
+    base: "text-[21px] leading-[1.5] sm:text-[26.5px] sm:leading-[1.55]",
+    long: "text-[18.5px] leading-[1.45] sm:text-[23px] sm:leading-[1.5]",
+    dense: "text-[16.5px] leading-[1.4] sm:text-[20px] sm:leading-[1.45]",
   }[density];
 
   return (
-    <section
-      className={cn(
-        "px-3 pt-3 transition-opacity duration-200 sm:px-6 sm:pt-5",
-        dimmed && "pointer-events-none opacity-[0.12]",
-        className,
-      )}
-    >
+    <section className={cn("px-3 pt-3 sm:px-6 sm:pt-5", className)}>
       <div className={cn("mx-auto w-full", width)}>
         <div className="mb-1.5 flex items-center justify-between pl-0.5">
           <span className="text-[9px] font-medium uppercase tracking-[0.15em] text-faint">

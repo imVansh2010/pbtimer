@@ -218,13 +218,11 @@ export function useCloudSync({
       // 3. Merge in both directions.
       const localSolves = localForAccount(id);
       const { merged, upload } = mergeSolves(localSolves, remote);
-      const localIds = new Set(localSolves.map((solve) => solve.id));
+      const localById = new Map(localSolves.map((solve) => [solve.id, solve]));
       const changedLocally =
         merged.length !== localSolves.length ||
         merged.some(
-          (solve) =>
-            !localIds.has(solve.id) ||
-            localSolves.find((it) => it.id === solve.id)?.penalty !== solve.penalty,
+          (solve) => !localById.has(solve.id) || localById.get(solve.id)?.penalty !== solve.penalty,
         );
       if (changedLocally) applySolvesRef.current(merged);
 
@@ -297,25 +295,63 @@ export function useCloudSync({
     [fail],
   );
 
+  /** One call covers a single delete and a bulk one, so a selection is one request. */
   const solveDeleted = useCallback(
-    (solveId: string) => {
-      // Record it first: if the request fails the deletion still reaches the cloud later.
-      writeDeletions([...readDeletions(), { id: solveId, at: Date.now() }]);
+    (solveIds: string[]) => {
+      const ids = [...new Set(solveIds)].filter((solveId) => solveId.length > 0);
+      if (ids.length === 0) return;
+
+      // Record them first: if the request fails the deletions still reach the cloud later.
+      const at = Date.now();
+      writeDeletions([...readDeletions(), ...ids.map((solveId) => ({ id: solveId, at }))]);
       const client = supabase;
       const id = userIdRef.current;
       if (!client || !id) return;
-      void client
-        .from("solves")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", solveId)
-        .eq("user_id", id)
-        .then(({ error: deleteError }) => {
+      void (async () => {
+        for (const batch of chunk(ids, BATCH)) {
+          const { error: deleteError } = await client
+            .from("solves")
+            .update({ deleted_at: new Date(at).toISOString() })
+            .eq("user_id", id)
+            .in("id", batch);
           if (deleteError) {
             fail(deleteError.message);
             return;
           }
-          writeDeletions(readDeletions().filter((entry) => entry.id !== solveId));
-        });
+          const removed = new Set(batch);
+          writeDeletions(readDeletions().filter((entry) => !removed.has(entry.id)));
+        }
+      })();
+    },
+    [fail],
+  );
+
+  /**
+   * Puts deleted solves back. The pending tombstones are dropped first: a
+   * reconcile would otherwise re-delete what the undo just restored, and the
+   * upload clears `deleted_at` on the rows that already reached the cloud.
+   */
+  const solveRestored = useCallback(
+    (restored: Solve[]) => {
+      if (restored.length === 0) return;
+      const ids = new Set(restored.map((solve) => solve.id));
+      writeDeletions(readDeletions().filter((entry) => !ids.has(entry.id)));
+
+      const client = supabase;
+      const id = userIdRef.current;
+      if (!client || !id) return;
+      void (async () => {
+        for (const batch of chunk(restored, BATCH)) {
+          const { error: restoreError } = await client.from("solves").upsert(
+            batch.map((solve) => toSolveRow(solve, id)),
+            { onConflict: "id" },
+          );
+          if (restoreError) {
+            fail(restoreError.message);
+            return;
+          }
+        }
+      })();
     },
     [fail],
   );
@@ -403,6 +439,7 @@ export function useCloudSync({
     syncNow,
     solveSaved,
     solveDeleted,
+    solveRestored,
     clearCloud,
     preferencesChanged,
   };

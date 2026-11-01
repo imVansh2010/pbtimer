@@ -7,45 +7,54 @@ export function effectiveMs(solve: Solve): number {
 }
 
 /**
+ * Trimmed mean of one window, without sorting it: a WCA average for five or
+ * more solves drops exactly the fastest and the slowest, so the sum, minimum
+ * and maximum are enough. A single DNF takes the dropped-slowest slot, and two
+ * DNFs make the average a DNF. Windows of three are a plain mean.
+ */
+function trimmedAverage(solves: Solve[], start: number, n: number): number {
+  let sum = 0;
+  let min = Infinity;
+  let max = -Infinity;
+  let dnfs = 0;
+
+  for (let index = start; index < start + n; index += 1) {
+    const value = effectiveMs(solves[index]!);
+    if (!Number.isFinite(value)) {
+      dnfs += 1;
+      continue;
+    }
+    sum += value;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+
+  if (n === 3) return dnfs > 0 ? Infinity : sum / 3;
+  if (dnfs > 1) return Infinity;
+  return dnfs === 1 ? (sum - min) / (n - 2) : (sum - min - max) / (n - 2);
+}
+
+/**
  * Average of the newest `n` solves, using WCA trimming rules.
  * Returns null when there are not enough solves, Infinity for a DNF average.
  */
 export function averageOf(solvesNewestFirst: Solve[], n: number): number | null {
   if (n < 3 || solvesNewestFirst.length < n) return null;
-  const window = solvesNewestFirst.slice(0, n).map(effectiveMs);
-  const dnfs = window.filter((value) => !Number.isFinite(value)).length;
-
-  if (n === 3) {
-    if (dnfs > 0) return Infinity;
-    return window.reduce((a, b) => a + b, 0) / n;
-  }
-
-  if (dnfs > 1) return Infinity;
-  const sorted = [...window].sort((a, b) => a - b);
-  const trimmed = sorted.slice(1, -1);
-  return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+  return trimmedAverage(solvesNewestFirst, 0, n);
 }
 
-export function bestAverage(solvesNewestFirst: Solve[], n: number): number | null {
-  if (solvesNewestFirst.length < n) return null;
+/** Best and worst completed window in one scan, both ignoring DNF averages. */
+function averageExtremes(solvesNewestFirst: Solve[], n: number): [number | null, number | null] {
+  if (solvesNewestFirst.length < n) return [null, null];
   let best: number | null = null;
-  for (let i = 0; i + n <= solvesNewestFirst.length; i += 1) {
-    const average = averageOf(solvesNewestFirst.slice(i), n);
-    if (average === null || !Number.isFinite(average)) continue;
-    if (best === null || average < best) best = average;
-  }
-  return best;
-}
-
-export function worstAverage(solvesNewestFirst: Solve[], n: number): number | null {
-  if (solvesNewestFirst.length < n) return null;
   let worst: number | null = null;
-  for (let i = 0; i + n <= solvesNewestFirst.length; i += 1) {
-    const average = averageOf(solvesNewestFirst.slice(i), n);
-    if (average === null || !Number.isFinite(average)) continue;
+  for (let start = 0; start + n <= solvesNewestFirst.length; start += 1) {
+    const average = trimmedAverage(solvesNewestFirst, start, n);
+    if (!Number.isFinite(average)) continue;
+    if (best === null || average < best) best = average;
     if (worst === null || average > worst) worst = average;
   }
-  return worst;
+  return [best, worst];
 }
 
 /** Mean of all valid solves, ignoring DNFs. */
@@ -97,6 +106,84 @@ export function recentValidTimes(solves: Solve[], limit = 30): number[] {
   return times.reverse();
 }
 
+/** Valid times, oldest first — the order a chart plots them in. */
+export function validTimes(solves: Solve[]): number[] {
+  const times: number[] = [];
+  for (let i = solves.length - 1; i >= 0; i -= 1) {
+    const value = effectiveMs(solves[i]!);
+    if (Number.isFinite(value)) times.push(value);
+  }
+  return times;
+}
+
+/** Median of values already known to be valid, leaving the input untouched. */
+export function medianOfValues(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
+}
+
+export interface ChartPoint {
+  /** Solve number, counting from the oldest in the window. */
+  index: number;
+  /** Effective time, or null for a DNF (which is not plottable). */
+  value: number | null;
+  /** Mean of the valid solves up to this one, over a short window. */
+  mean: number | null;
+}
+
+/**
+ * Newest-first solves become a plottable series: every solve in recording
+ * order, plus a rolling mean so a single lucky solve does not read as a trend.
+ */
+export function trendSeries(solves: Solve[], window = 5): ChartPoint[] {
+  const points: ChartPoint[] = [];
+  const recent: number[] = [];
+  for (let i = solves.length - 1; i >= 0; i -= 1) {
+    const value = effectiveMs(solves[i]!);
+    if (Number.isFinite(value)) {
+      recent.push(value);
+      if (recent.length > window) recent.shift();
+    }
+    const mean = recent.length > 0 ? recent.reduce((a, b) => a + b, 0) / recent.length : null;
+    points.push({
+      index: points.length + 1,
+      value: Number.isFinite(value) ? value : null,
+      mean,
+    });
+  }
+  return points;
+}
+
+export interface HistogramBucket {
+  from: number;
+  to: number;
+  count: number;
+}
+
+/** Equal-width buckets across the valid times, for the distribution chart. */
+export function histogram(values: number[], bucketCount = 10): HistogramBucket[] {
+  const valid = values.filter((value) => Number.isFinite(value));
+  if (valid.length === 0) return [];
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  if (max - min < 1) return [{ from: min, to: max, count: valid.length }];
+
+  const count = Math.max(1, Math.min(bucketCount, valid.length));
+  const width = (max - min) / count;
+  const buckets: HistogramBucket[] = Array.from({ length: count }, (_, index) => ({
+    from: min + index * width,
+    to: min + (index + 1) * width,
+    count: 0,
+  }));
+  for (const value of valid) {
+    const index = Math.min(count - 1, Math.max(0, Math.floor((value - min) / width)));
+    buckets[index]!.count += 1;
+  }
+  return buckets;
+}
+
 export interface SessionStats {
   count: number;
   validCount: number;
@@ -125,11 +212,16 @@ export function computeStats(solves: Solve[]): SessionStats {
     const value = effectiveMs(solve);
     return Number.isFinite(value) ? sum + value : sum;
   }, 0);
+  const dnfs = dnfCount(solves);
+  const [bestAo5, worstAo5] = averageExtremes(solves, 5);
+  const [bestAo12, worstAo12] = averageExtremes(solves, 12);
+  const [bestAo50, worstAo50] = averageExtremes(solves, 50);
+  const [bestAo100, worstAo100] = averageExtremes(solves, 100);
 
   return {
     count: solves.length,
-    validCount: solves.length - dnfCount(solves),
-    dnfCount: dnfCount(solves),
+    validCount: solves.length - dnfs,
+    dnfCount: dnfs,
     best: bestSingle(solves),
     worst: worstSingle(solves),
     mean: meanOf(solves),
@@ -138,14 +230,14 @@ export function computeStats(solves: Solve[]): SessionStats {
     ao12: averageOf(solves, 12),
     ao50: averageOf(solves, 50),
     ao100: averageOf(solves, 100),
-    bestAo5: bestAverage(solves, 5),
-    bestAo12: bestAverage(solves, 12),
-    bestAo50: bestAverage(solves, 50),
-    bestAo100: bestAverage(solves, 100),
-    worstAo5: worstAverage(solves, 5),
-    worstAo12: worstAverage(solves, 12),
-    worstAo50: worstAverage(solves, 50),
-    worstAo100: worstAverage(solves, 100),
+    bestAo5,
+    bestAo12,
+    bestAo50,
+    bestAo100,
+    worstAo5,
+    worstAo12,
+    worstAo50,
+    worstAo100,
     totalMs,
   };
 }

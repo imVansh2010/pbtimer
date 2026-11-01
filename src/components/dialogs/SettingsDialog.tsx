@@ -6,8 +6,9 @@ import { Segmented } from "../ui/Segmented";
 import { Button } from "../ui/Button";
 import { cn } from "../../lib/cn";
 import { ACCENTS, accentById } from "../../lib/accents";
-import { parseBackup } from "../../lib/import";
-import type { Settings, Solve } from "../../lib/types";
+import { parseImportFile } from "../../lib/import";
+import type { ImportGroup } from "../../lib/sessions";
+import type { Settings } from "../../lib/types";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -16,7 +17,7 @@ interface SettingsDialogProps {
   onClose: () => void;
   onExport: () => void;
   onBackup: () => void;
-  onImport: (imported: Solve[]) => { added: number; duplicates: number };
+  onImport: (groups: ImportGroup[]) => { sessions: number; added: number; duplicates: number };
   onReset: () => void;
 }
 
@@ -59,23 +60,30 @@ export function SettingsDialog({
     if (!open) setImportResult(null);
   }, [open]);
 
-  async function readBackup(event: ChangeEvent<HTMLInputElement>) {
+  async function readImportFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
-      setImportResult({ tone: "bad", text: "That file is too large for a solve backup." });
+      setImportResult({ tone: "bad", text: "That file is too large for a solve log." });
       return;
     }
     try {
-      const parsed = parseBackup(await file.text());
-      if (parsed.solves.length === 0) {
+      const parsed = parseImportFile(await file.text());
+      if (parsed.groups.length === 0) {
         setImportResult({ tone: "bad", text: "No solves found in that file." });
         return;
       }
-      const { added, duplicates } = onImport(parsed.solves);
-      const parts = [`${added} solve${added === 1 ? "" : "s"} imported`];
-      if (duplicates > 0) parts.push(`${duplicates} already here`);
+      const { sessions, added, duplicates } = onImport(parsed.groups);
+      const parts =
+        added === 0
+          ? [`Every solve in that file is already here`]
+          : [
+              `${added} solve${added === 1 ? "" : "s"} imported into ${sessions} new session${
+                sessions === 1 ? "" : "s"
+              }`,
+              ...(duplicates > 0 ? [`${duplicates} already here`] : []),
+            ];
       if (parsed.rejected > 0) parts.push(`${parsed.rejected} skipped`);
       setImportResult({ tone: "good", text: `${parts.join(" · ")}.` });
     } catch (error) {
@@ -265,9 +273,9 @@ export function SettingsDialog({
             <input
               ref={fileRef}
               type="file"
-              accept=".json,application/json"
+              accept=".json,application/json,.txt,text/plain"
               className="hidden"
-              onChange={readBackup}
+              onChange={readImportFile}
             />
 
             {importResult ? (
@@ -286,8 +294,10 @@ export function SettingsDialog({
 
             <p className="mt-4 text-[13px] leading-[1.6] text-faint">
               <strong className="font-medium text-chalk-dim">Export log</strong> writes a readable
-              .txt; <strong className="font-medium text-chalk-dim">Back up</strong> writes a .json
-              that restores everything — dates included. Import merges a backup into this browser.
+              .txt grouped by session;{" "}
+              <strong className="font-medium text-chalk-dim">Back up</strong> writes a .json with
+              the sessions and every solve. Import accepts either file and files what it finds into
+              new sessions, so nothing blends into the session you are timing.
             </p>
             <p className="mt-2.5 text-[13px] leading-[1.6] text-faint">
               Solves, settings and the selected puzzle live in this browser only and nothing is

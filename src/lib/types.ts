@@ -26,6 +26,26 @@ export interface Solve {
   date: number;
   /** Epoch milliseconds of the last edit (penalty), used when merging devices. */
   updatedAt?: number;
+  /** Session this solve belongs to. Solves from older files have none until adopted. */
+  sessionId?: string;
+}
+
+/**
+ * A run of solves for one event. Sessions are kept separately from the solves
+ * so a solve only carries its session's id, and a session can be browsed after
+ * a newer one has taken over.
+ */
+export interface Session {
+  id: string;
+  puzzle: PuzzleId;
+  /** Shown in the header, the side panel and the statistics section. */
+  name: string;
+  /** Epoch milliseconds when the session was started. */
+  createdAt: number;
+  /** Where it came from: recorded here, or created by an import. */
+  source: "timer" | "import";
+  /** The session that holds solves inherited from before sessions existed. */
+  adopted?: boolean;
 }
 
 export interface Settings {

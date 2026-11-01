@@ -5,6 +5,10 @@ import type { SessionStats } from "../lib/stats";
 import { cn } from "../lib/cn";
 
 interface StatsPanelProps {
+  /** Name of the session the panel is showing. */
+  sessionName: string;
+  eventLabel: string;
+  /** Stats for the open session only. */
   stats: SessionStats;
   trend: number[];
   onOpenStats: () => void;
@@ -35,6 +39,8 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub: st
 }
 
 export const StatsPanel = memo(function StatsPanel({
+  sessionName,
+  eventLabel,
   stats,
   trend,
   onOpenStats,
@@ -42,8 +48,11 @@ export const StatsPanel = memo(function StatsPanel({
 }: StatsPanelProps) {
   return (
     <section className="px-3 pt-3 sm:px-4 sm:pt-4">
-      <div className="flex items-center justify-between">
-        <h2 className="eyebrow">Session</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex min-w-0 items-baseline gap-1.5">
+          <span className="eyebrow truncate">{sessionName}</span>
+          <span className="shrink-0 font-mono text-[10px] text-faint">{eventLabel}</span>
+        </h2>
         <button
           type="button"
           onClick={onOpenStats}

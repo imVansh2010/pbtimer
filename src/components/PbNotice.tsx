@@ -1,14 +1,24 @@
 import { useEffect, useState } from "react";
 import { cn } from "../lib/cn";
 
+export type PbKind = "single" | "ao5" | "ao12" | "ao50" | "ao100";
+
 export interface PbEvent {
   /** Changes on every personal best so a repeat can retrigger the animation. */
   id: number;
   ms: number;
+  kind: PbKind;
+  /** The open session only, or every session of this event. */
+  scope: "session" | "all";
 }
 
 const HOLD_MS = 2800;
 const EXIT_MS = 180;
+
+function describe(event: PbEvent): string {
+  const scope = event.scope === "all" ? "all-time" : "session";
+  return event.kind === "single" ? `new ${scope} PB!` : `new ${scope} ${event.kind} PB!`;
+}
 
 /**
  * Spans the header and fades in on a personal best: in, hold for a beat, out.
@@ -45,7 +55,7 @@ export function PbNotice({ event }: { event: PbEvent | null }) {
           reserves room for descenders that upper-cased text never fills, which
           left the words sitting about 2px high in the bar. */}
       <span className="text-center text-[clamp(10px,2.6vw,15px)] font-semibold leading-none tracking-[0.12em] whitespace-nowrap text-accent uppercase">
-        Congratulations on your new PB!
+        Congratulations on a {describe(shown)}
       </span>
     </div>
   );

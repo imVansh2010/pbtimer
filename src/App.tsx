@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Wordmark } from "./components/Wordmark";
 import { PuzzleSelect } from "./components/PuzzleSelect";
+import { SessionMenu } from "./components/SessionMenu";
 import { ScrambleBar } from "./components/ScrambleBar";
 import { TimerDisplay } from "./components/TimerDisplay";
 import { CubeNet, supportsNet } from "./components/CubeNet";
@@ -34,30 +35,50 @@ import { useScramble } from "./hooks/useScramble";
 import { useTimer } from "./hooks/useTimer";
 import { useAuth } from "./hooks/useAuth";
 import { useCloudSync } from "./hooks/useCloudSync";
-import { bestSingle, computeStats, recentValidTimes } from "./lib/stats";
+import { averageOf, computeStats, recentValidTimes } from "./lib/stats";
 import { buildBackupJson, backupFilename, buildExportText, downloadText } from "./lib/export";
-import { mergeImported } from "./lib/import";
+import {
+  adoptOrphans,
+  cleanSessionName,
+  createSession,
+  importGroups,
+  readActiveSessions,
+  readSessions,
+  resolveActiveSession,
+  solvesOfSession,
+  type ImportGroup,
+} from "./lib/sessions";
 import { isPuzzleId, puzzleById } from "./lib/puzzles";
 import { readStore, STORAGE_KEYS, writeStore } from "./lib/storage";
-import type { PbEvent } from "./components/PbNotice";
+import type { PbEvent, PbKind } from "./components/PbNotice";
 import { readSettings } from "./lib/settings";
 import { applyAccent } from "./lib/accents";
 import { cn, uid } from "./lib/cn";
-import type { Penalty, PuzzleId, Settings, Solve } from "./lib/types";
+import type { Penalty, PuzzleId, Session, Settings, Solve } from "./lib/types";
 
 /** Phones and tablets drive the timer by touching it, not by pressing space. */
 const COARSE_POINTER = "(pointer: coarse)";
 
+// One MediaQueryList, shared: the snapshot is read on every render, and a new
+// one per frame is needless work while the timer runs.
+let coarseQuery: MediaQueryList | null = null;
+function coarsePointerQuery(): MediaQueryList {
+  coarseQuery ??= window.matchMedia(COARSE_POINTER);
+  return coarseQuery;
+}
+
 function subscribePointer(onChange: () => void) {
-  const media = window.matchMedia(COARSE_POINTER);
+  const media = coarsePointerQuery();
   media.addEventListener("change", onChange);
   return () => media.removeEventListener("change", onChange);
 }
 
 function readCoarsePointer() {
-  return window.matchMedia(COARSE_POINTER).matches;
+  return coarsePointerQuery().matches;
 }
 const MAX_SOLVES = 5000;
+/** How long the undo button for a deleted solve stays in the panel. */
+const UNDO_MS = 5000;
 
 const PANEL_MIN = 300;
 const PANEL_MAX = 620;
@@ -71,7 +92,20 @@ function clampPanel(value: number): number {
   return Math.round(Math.min(max, Math.max(PANEL_MIN, value)));
 }
 
-type DialogId = "settings" | "stats" | "export" | "reset" | "help" | null;
+type DialogId = "settings" | "stats" | "export" | "help" | null;
+
+/** A newly set average beats the old best only if there was one to beat. */
+function improvedAverage(before: number | null, after: number | null): after is number {
+  return before !== null && after !== null && Number.isFinite(after) && after < before;
+}
+
+/** One confirmation slot, so every destructive action shares the same dialog. */
+interface Confirmation {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  action: () => void;
+}
 
 function isSolve(value: unknown): value is Solve {
   if (typeof value !== "object" || value === null) return false;
@@ -93,6 +127,9 @@ export default function App() {
     return Array.isArray(stored) ? stored.filter(isSolve) : [];
   });
 
+  const [sessions, setSessions] = useState<Session[]>(readSessions);
+  const [activeByPuzzle, setActiveByPuzzle] = useState<Record<string, string>>(readActiveSessions);
+
   const [settings, setSettings] = useState<Settings>(readSettings);
 
   const [puzzle, setPuzzle] = useState<PuzzleId>(() => {
@@ -101,6 +138,7 @@ export default function App() {
   });
 
   const [dialog, setDialog] = useState<DialogId>(null);
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
 
   const [pb, setPb] = useState<PbEvent | null>(null);
   const pbSeq = useRef(0);
@@ -109,6 +147,15 @@ export default function App() {
 
   /** The solve the timer just produced, so its penalty can be shown and edited. */
   const [settledId, setSettledId] = useState<string | null>(null);
+
+  /** Solves deleted moments ago, kept so the panel can offer an undo. */
+  const [undoBuffer, setUndoBuffer] = useState<{
+    solves: Solve[];
+    settledId: string | null;
+  } | null>(null);
+  const undoTimer = useRef<number | null>(null);
+  /** True while the digits on the timer belong to a solve that was deleted. */
+  const [deletedSettled, setDeletedSettled] = useState(false);
 
   const [showNet, setShowNet] = useState<boolean>(() => {
     const stored = readStore<unknown>(STORAGE_KEYS.cubeNet, true);
@@ -143,7 +190,7 @@ export default function App() {
     onApplySolves: setSolves,
     onApplyPreferences: applyPreferences,
   });
-  const { solveSaved, solveDeleted, clearCloud, preferencesChanged, syncNow } = sync;
+  const { solveSaved, solveDeleted, solveRestored, clearCloud, preferencesChanged, syncNow } = sync;
 
   useLayoutEffect(() => {
     applyAccent(settings.accent);
@@ -152,6 +199,14 @@ export default function App() {
   useEffect(() => {
     writeStore(STORAGE_KEYS.solves, solves);
   }, [solves]);
+
+  useEffect(() => {
+    writeStore(STORAGE_KEYS.sessions, sessions);
+  }, [sessions]);
+
+  useEffect(() => {
+    writeStore(STORAGE_KEYS.activeSessions, activeByPuzzle);
+  }, [activeByPuzzle]);
 
   useEffect(() => {
     writeStore(STORAGE_KEYS.settings, settings);
@@ -170,12 +225,28 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [panelWidth]);
 
+  // Solves written before sessions existed, and solves pulled from the cloud
+  // (which has no session column), get a session of their own instead of
+  // vanishing from a panel that only shows the open session.
+  useEffect(() => {
+    const adopted = adoptOrphans(solves, sessions);
+    if (!adopted) return;
+    setSolves(adopted.solves);
+    setSessions(adopted.sessions);
+  }, [solves, sessions]);
+
   useEffect(() => {
     function onResize() {
       setPanelWidth((width) => clampPanel(width));
     }
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
+    };
   }, []);
 
   // Space belongs to the timer, so pointer clicks must not park focus on a
@@ -194,10 +265,70 @@ export default function App() {
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, []);
 
+  const activeSession = useMemo(
+    () => resolveActiveSession(sessions, activeByPuzzle, puzzle),
+    [sessions, activeByPuzzle, puzzle],
+  );
+  const sessionSolves = useMemo(
+    () => solvesOfSession(solves, activeSession?.id),
+    [solves, activeSession],
+  );
+  const eventSolves = useMemo(
+    () => solves.filter((solve) => solve.puzzle === puzzle),
+    [solves, puzzle],
+  );
+  const stats = useMemo(() => computeStats(sessionSolves), [sessionSolves]);
+  const allTime = useMemo(() => computeStats(eventSolves), [eventSolves]);
+
+  /**
+   * The strongest personal best the finished solve just set, if any. Adding a
+   * solve at the front only creates new average windows at the front, so the
+   * current average is compared with the old best — no full rescan needed.
+   */
+  const findPersonalBest = useCallback(
+    (solve: Solve, effective: number): { kind: PbKind; scope: "session" | "all" } | null => {
+      if (allTime.best !== null && effective < allTime.best)
+        return { kind: "single", scope: "all" };
+      if (stats.best !== null && effective < stats.best)
+        return { kind: "single", scope: "session" };
+
+      const sizes: Array<{ size: 5 | 12 | 50 | 100; key: "ao5" | "ao12" | "ao50" | "ao100" }> = [
+        { size: 5, key: "ao5" },
+        { size: 12, key: "ao12" },
+        { size: 50, key: "ao50" },
+        { size: 100, key: "ao100" },
+      ];
+
+      for (const scope of ["all", "session"] as const) {
+        const before = scope === "all" ? allTime : stats;
+        const list = scope === "all" ? eventSolves : sessionSolves;
+        const bestOf = {
+          ao5: before.bestAo5,
+          ao12: before.bestAo12,
+          ao50: before.bestAo50,
+          ao100: before.bestAo100,
+        };
+        for (const { size, key } of sizes) {
+          const after = averageOf([solve, ...list], size);
+          if (improvedAverage(bestOf[key], after)) return { kind: key, scope };
+        }
+      }
+      return null;
+    },
+    [allTime, eventSolves, sessionSolves, stats],
+  );
+
   const handleComplete = useCallback(
     ({ ms, penalty }: { ms: number; penalty: Penalty }) => {
-      const previousBest = bestSingle(solves);
       const effective = penalty === "dnf" ? Infinity : ms + (penalty === "plus2" ? 2000 : 0);
+
+      // The first solve of an event opens its session, so a solve is never
+      // recorded outside one and always shows up in the panel.
+      const session = activeSession ?? createSession(puzzle, sessions);
+      if (!activeSession) {
+        setSessions((previous) => [...previous, session]);
+        setActiveByPuzzle((previous) => ({ ...previous, [puzzle]: session.id }));
+      }
 
       const solve: Solve = {
         id: uid(),
@@ -206,22 +337,25 @@ export default function App() {
         scramble,
         puzzle,
         date: Date.now(),
+        sessionId: session.id,
       };
 
       setSolves((previous) => [solve, ...previous].slice(0, MAX_SOLVES));
       setSettledId(solve.id);
+      setDeletedSettled(false);
       nextScramble();
       solveSaved(solve);
 
-      if (previousBest !== null && effective < previousBest) {
+      const best = findPersonalBest(solve, effective);
+      if (best) {
         pbSeq.current += 1;
-        setPb({ id: pbSeq.current, ms: effective });
+        setPb({ id: pbSeq.current, ms: effective, kind: best.kind, scope: best.scope });
       }
     },
-    [scramble, puzzle, nextScramble, solves, solveSaved],
+    [activeSession, findPersonalBest, sessions, puzzle, scramble, nextScramble, solveSaved],
   );
 
-  const modalOpen = dialog !== null;
+  const modalOpen = dialog !== null || confirmation !== null;
 
   const timer = useTimer({
     inspection: settings.inspection,
@@ -242,9 +376,8 @@ export default function App() {
     timer.status === "ready" ||
     timer.status === "running";
 
-  const stats = useMemo(() => computeStats(solves), [solves]);
-  const trend = useMemo(() => recentValidTimes(solves, 30), [solves]);
-  const lastSolve = solves[0] ?? null;
+  const trend = useMemo(() => recentValidTimes(sessionSolves, 30), [sessionSolves]);
+  const lastSolve = sessionSolves[0] ?? null;
 
   // Reading the penalty off the recorded solve keeps the timer in step with
   // edits, and stops it showing a stale penalty if that solve is deleted.
@@ -254,11 +387,15 @@ export default function App() {
   );
   const running = timer.status === "running";
   const netAvailable = supportsNet(puzzle);
-  const attemptInProgress = timer.status === "holding" || timer.status === "ready" || running;
+
+  // The next attempt takes the digits back, so the deleted mark goes with it.
+  useEffect(() => {
+    if (focusing) setDeletedSettled(false);
+  }, [focusing]);
 
   const exportText = useMemo(
-    () => (dialog === "export" ? buildExportText(solves) : ""),
-    [dialog, solves],
+    () => (dialog === "export" ? buildExportText(sessions, solves) : ""),
+    [dialog, sessions, solves],
   );
 
   const applyPenalty = useCallback(
@@ -273,13 +410,52 @@ export default function App() {
     [solves, solveSaved],
   );
 
-  const deleteSolve = useCallback(
-    (id: string) => {
-      setSolves((previous) => previous.filter((solve) => solve.id !== id));
-      solveDeleted(id);
+  const deleteSolves = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const targets = new Set(ids);
+      const removed = solves.filter((solve) => targets.has(solve.id));
+      const removedSettled = settledId !== null && targets.has(settledId) ? settledId : null;
+
+      setSolves((previous) => previous.filter((solve) => !targets.has(solve.id)));
+      if (removedSettled) {
+        setSettledId(null);
+        setDeletedSettled(true);
+      }
+      solveDeleted(ids);
+
+      // A delete is easy to misclick, so it stays reversible for a few seconds.
+      if (removed.length > 0) {
+        setUndoBuffer({ solves: removed, settledId: removedSettled });
+        if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
+        undoTimer.current = window.setTimeout(() => {
+          undoTimer.current = null;
+          setUndoBuffer(null);
+        }, UNDO_MS);
+      }
     },
-    [solveDeleted],
+    [solves, settledId, solveDeleted],
   );
+
+  const undoDelete = useCallback(() => {
+    if (!undoBuffer) return;
+    if (undoTimer.current !== null) {
+      window.clearTimeout(undoTimer.current);
+      undoTimer.current = null;
+    }
+    const restored = undoBuffer.solves;
+    setSolves((previous) =>
+      [...previous, ...restored].sort((a, b) => b.date - a.date).slice(0, MAX_SOLVES),
+    );
+    if (undoBuffer.settledId) {
+      setSettledId(undoBuffer.settledId);
+      setDeletedSettled(false);
+    }
+    solveRestored(restored);
+    setUndoBuffer(null);
+  }, [undoBuffer, solveRestored]);
+
+  const deleteSolve = useCallback((id: string) => deleteSolves([id]), [deleteSolves]);
 
   const updateSettings = useCallback(
     (patch: Partial<Settings>) => {
@@ -292,21 +468,113 @@ export default function App() {
   const changePuzzle = useCallback(
     (next: PuzzleId) => {
       setPuzzle(next);
+      // The panel now shows another event, so the settled solve and any pending
+      // undo belong to a view that is no longer on screen.
+      setSettledId(null);
+      setDeletedSettled(false);
+      setUndoBuffer(null);
       preferencesChanged();
     },
     [preferencesChanged],
   );
 
-  const importSolves = useCallback(
-    (imported: Solve[]) => {
-      const result = mergeImported(solves, imported, MAX_SOLVES);
+  /** Finishes the open session and opens a fresh one for the same event. */
+  const startSession = useCallback(() => {
+    const session = createSession(puzzle, sessions);
+    setSessions((previous) => [...previous, session]);
+    setActiveByPuzzle((previous) => ({ ...previous, [puzzle]: session.id }));
+    setSettledId(null);
+    setDeletedSettled(false);
+    setUndoBuffer(null);
+  }, [puzzle, sessions]);
+
+  const openSession = useCallback((session: Session) => {
+    setPuzzle(session.puzzle);
+    setActiveByPuzzle((previous) => ({ ...previous, [session.puzzle]: session.id }));
+    setSettledId(null);
+    setDeletedSettled(false);
+    setUndoBuffer(null);
+    setDialog(null);
+  }, []);
+
+  const renameSession = useCallback((session: Session, name: string) => {
+    const cleaned = cleanSessionName(name, session.name);
+    setSessions((previous) =>
+      previous.map((entry) => (entry.id === session.id ? { ...entry, name: cleaned } : entry)),
+    );
+  }, []);
+
+  const requestDeleteSession = useCallback(
+    (session: Session) => {
+      const owned = solvesOfSession(solves, session.id);
+      setConfirmation({
+        title: `Delete ${session.name}?`,
+        description: `${owned.length} solve${owned.length === 1 ? "" : "s"} in ${session.name} (${
+          puzzleById(session.puzzle).label
+        }) will be deleted. Export first if you want to keep a copy.`,
+        confirmLabel: "Delete session",
+        action: () => {
+          const removedSettled =
+            settledId !== null && owned.some((solve) => solve.id === settledId);
+          setSolves((previous) => previous.filter((solve) => solve.sessionId !== session.id));
+          setSessions((previous) => previous.filter((entry) => entry.id !== session.id));
+          setUndoBuffer(null);
+          setDialog(null);
+          if (removedSettled) {
+            setSettledId(null);
+            setDeletedSettled(true);
+          }
+          if (owned.length > 0) solveDeleted(owned.map((solve) => solve.id));
+        },
+      });
+    },
+    [solves, settledId, solveDeleted],
+  );
+
+  const requestReset = useCallback(() => {
+    setConfirmation({
+      title: "Reset everything?",
+      description:
+        "This permanently deletes every solve and every session in this browser. Export first if you want to keep a copy.",
+      confirmLabel: "Reset everything",
+      action: () => {
+        setSolves([]);
+        setSessions([]);
+        setActiveByPuzzle({});
+        setSettledId(null);
+        setDeletedSettled(false);
+        setUndoBuffer(null);
+        clearCloud();
+      },
+    });
+  }, [clearCloud]);
+
+  const importSolveGroups = useCallback(
+    (groups: ImportGroup[]) => {
+      const result = importGroups({ sessions, solves }, groups, MAX_SOLVES);
       if (result.added > 0) {
+        setSessions(result.sessions);
         setSolves(result.solves);
+        // Show what arrived: open the first imported session of its event.
+        const first = result.created[0];
+        if (first) {
+          setPuzzle(first.puzzle);
+          setActiveByPuzzle((previous) => ({ ...previous, [first.puzzle]: first.id }));
+        }
         setFlushToken((token) => token + 1);
       }
-      return { added: result.added, duplicates: result.duplicates };
+      return {
+        sessions: result.created.length,
+        added: result.added,
+        duplicates: result.duplicates,
+      };
     },
-    [solves],
+    [sessions, solves],
+  );
+
+  const backup = useCallback(
+    () => downloadText(backupFilename(), buildBackupJson(sessions, solves), "application/json"),
+    [sessions, solves],
   );
 
   // Reconciling straight after setSolves would read the previous list, so the
@@ -315,12 +583,6 @@ export default function App() {
     if (flushToken === 0) return;
     syncNow();
   }, [flushToken, syncNow]);
-
-  const resetSession = useCallback(() => {
-    setSolves([]);
-    setDialog(null);
-    clearCloud();
-  }, [clearCloud]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -332,6 +594,8 @@ export default function App() {
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
         if (target.isContentEditable) return;
+        // An open menu owns its keys: N, 2, D and Delete must not act behind it.
+        if (target.closest('[role="dialog"], [role="listbox"]')) return;
       }
 
       if (event.key === "Escape") {
@@ -341,7 +605,9 @@ export default function App() {
 
       // Changing the scramble or the last solve mid-attempt would attach the
       // wrong scramble to the result, so these wait for the timer to stop.
-      if (attemptInProgress) return;
+      // This covers inspection too: the scramble is already on the clock, and
+      // the header is hidden, so a shortcut must not swap it unseen.
+      if (focusing) return;
 
       const key = event.key.toLowerCase();
 
@@ -364,15 +630,7 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    modalOpen,
-    lastSolve,
-    attemptInProgress,
-    nextScramble,
-    applyPenalty,
-    deleteSolve,
-    cancelInspection,
-  ]);
+  }, [modalOpen, lastSolve, focusing, nextScramble, applyPenalty, deleteSolve, cancelInspection]);
 
   const touch = useSyncExternalStore(subscribePointer, readCoarsePointer, () => false);
 
@@ -432,14 +690,27 @@ export default function App() {
     <div className="relative flex min-h-dvh flex-col bg-ink-950 lg:h-dvh lg:overflow-hidden">
       <header
         className={cn(
-          "relative z-20 flex h-12 shrink-0 items-center gap-3 border-b border-white/[0.055] px-3 transition-opacity duration-200 sm:h-13 sm:px-6",
-          focusing && "pointer-events-none opacity-[0.12]",
+          "relative z-20 h-12 shrink-0 items-center gap-3 border-b border-white/[0.055] px-3 sm:h-13 sm:px-6",
+          // Gone entirely during an attempt, so the stage is the whole window
+          // and the digits can sit at its exact centre.
+          focusing ? "hidden" : "flex",
         )}
       >
         <PbNotice event={pb} />
         <Wordmark />
         <div aria-hidden="true" className="mx-0.5 hidden h-5 w-px bg-white/[0.07] sm:block" />
-        <PuzzleSelect value={puzzle} onChange={changePuzzle} disabled={attemptInProgress} />
+        <PuzzleSelect value={puzzle} onChange={changePuzzle} disabled={focusing} />
+        <SessionMenu
+          puzzle={puzzle}
+          sessions={sessions}
+          solves={solves}
+          activeSession={activeSession}
+          onSelect={openSession}
+          onNew={startSession}
+          onRename={renameSession}
+          onDelete={requestDeleteSession}
+          disabled={focusing}
+        />
         <div className="ml-auto flex items-center gap-0.5">
           <IconButton label="Statistics" onClick={() => openDialog("stats")} disabled={running}>
             <BarChart3 className="size-4" aria-hidden="true" />
@@ -455,18 +726,35 @@ export default function App() {
 
       <main
         className="app-main relative z-10 min-h-0 flex-1"
-        style={{ "--panel-width": `${panelWidth}px` } as CSSProperties}
+        style={{ "--panel-width": `${focusing ? 0 : panelWidth}px` } as CSSProperties}
       >
         {/* On a phone the timer owns the first screen, with the top of the side
             panel peeking out as a hint that there is more below. */}
-        <section className="@container grid min-h-[calc(100svh-6.5rem)] grid-cols-1 grid-rows-[1fr_auto_1fr] sm:min-h-[calc(100svh-7rem)] lg:min-h-0 lg:overflow-y-auto">
+        {/* Closing a dialog must give the page back exactly as it was, so the
+            stage only changes layout while an attempt is actually in progress. */}
+        <section
+          className={cn(
+            // `overflow-x-clip` keeps a sub-pixel of glyph overflow from ever
+            // producing a horizontal scrollbar under the timer.
+            "@container relative min-h-[calc(100svh-6.5rem)] overflow-x-clip sm:min-h-[calc(100svh-7rem)] lg:min-h-0 lg:overflow-y-auto",
+            // While focusing the stage stops being a three-row grid and becomes
+            // a single column holding only the timer, which then fills it. With
+            // the panel collapsed too (below), the digits are centred in the
+            // whole window rather than in the leftover column.
+            focusing ? "flex flex-col" : "grid grid-cols-1 grid-rows-[1fr_auto_1fr]",
+          )}
+        >
+          {/* Hidden rather than unmounted while focusing: keeping the children in
+              the same positions means the timer element is never remounted, so a
+              pointer held down to arm it never loses its capture. `display: none`
+              also stops the cube net painting for a frame while the layout
+              changes, which is what made it flash to the side. */}
           <ScrambleBar
             scramble={scramble}
             loading={loading}
             puzzleLabel={puzzleById(puzzle).label}
             onNext={nextScramble}
-            dimmed={focusing}
-            className="col-start-1 row-start-1 self-start"
+            className={cn("col-start-1 row-start-1 self-start", focusing && "hidden")}
           />
 
           {/* The stage is three rows: the scramble, the digits, the hint. The two
@@ -477,8 +765,17 @@ export default function App() {
               which is why no single padding value ever sat right. Equal rows also
               keep the digits clear of the scramble: when the scramble is too tall
               for its half, that row grows to fit it and pushes the digits down
-              instead of letting them land behind the text. */}
-          <div className="col-start-1 row-start-2 flex items-center justify-center px-3 py-2 sm:px-4">
+              instead of letting them land behind the text.
+
+              Once an attempt starts, everything but the digits disappears and
+              the stage turns into one flexible cell, so the digits are centred
+              no matter how long the scramble is. */}
+          <div
+            className={cn(
+              "col-start-1 row-start-2 flex items-center justify-center px-3 py-2 sm:px-4",
+              focusing && "relative z-10 flex-1 py-0",
+            )}
+          >
             <div
               role="presentation"
               onPointerDown={(event) => {
@@ -487,8 +784,8 @@ export default function App() {
                 timer.press();
               }}
               onPointerUp={() => timer.release()}
-              onPointerCancel={() => timer.release()}
-              className="@container w-full max-w-[820px] cursor-pointer touch-none select-none rounded-2xl px-2 py-3"
+              onPointerCancel={() => timer.abortPress()}
+              className="w-full max-w-[1100px] cursor-pointer touch-none select-none rounded-2xl px-2 py-3 @container"
             >
               <TimerDisplay
                 status={timer.status}
@@ -496,23 +793,26 @@ export default function App() {
                 inspecting={timer.inspecting}
                 inspectionLeft={timer.inspectionLeft}
                 hideRunningTime={settings.hideRunningTime}
+                inspectionEnabled={settings.inspection}
                 penalty={settledPenalty}
+                zoomed={focusing}
+                deleted={deletedSettled}
               />
             </div>
           </div>
 
-          <div className="relative col-start-1 row-start-3 flex flex-col items-center self-end pb-2 sm:pb-5">
+          <div
+            className={cn(
+              "relative col-start-1 row-start-3 items-center self-end pb-2 sm:pb-5",
+              focusing ? "hidden" : "flex flex-col",
+            )}
+          >
             {/* Above the hint on phones, anchored to the bottom corner on wider
                 screens where there is room beside the hint. The toggle shares
                 the same 16px left/bottom inset as the net so the block reads as
                 one corner widget. */}
             {netAvailable ? (
-              <div
-                className={cn(
-                  "pointer-events-none absolute bottom-full left-4 mb-2 transition-opacity duration-200 @min-[700px]:bottom-4 @min-[700px]:mb-0",
-                  focusing && "opacity-[0.12]",
-                )}
-              >
+              <div className="pointer-events-none absolute bottom-full left-4 mb-2 transition-opacity duration-200 @min-[700px]:bottom-4 @min-[700px]:mb-0">
                 <div className="relative">
                   {showNet ? <CubeNet scramble={scramble} puzzle={puzzle} /> : null}
                   <button
@@ -540,12 +840,7 @@ export default function App() {
 
             {/* A phone drives the timer by touch, so the keyboard hint is just
                 a line of text eating the vertical space the digits want. */}
-            <p
-              className={cn(
-                "hidden h-5 items-center gap-2 text-[11px] text-faint transition-opacity duration-200 sm:flex",
-                focusing && "opacity-[0.12]",
-              )}
-            >
+            <p className="hidden h-5 items-center gap-2 text-[11px] text-faint transition-opacity duration-200 sm:flex">
               {touch ? null : <kbd className="kbd">space</kbd>}
               <span>{hint}</span>
             </p>
@@ -554,8 +849,10 @@ export default function App() {
 
         <aside
           className={cn(
-            "relative flex min-h-0 flex-col border-t border-white/[0.055] bg-ink-950/50 transition-opacity duration-200 lg:overflow-hidden lg:border-l lg:border-t-0",
-            focusing && "pointer-events-none opacity-[0.12]",
+            "relative min-h-0 flex-col border-t border-white/[0.055] bg-ink-950/50 lg:overflow-hidden lg:border-l lg:border-t-0",
+            // Out of the layout while focusing, so the collapsed column cannot
+            // overflow and the digits centre on the whole screen.
+            focusing ? "hidden" : "flex",
           )}
         >
           <div
@@ -584,6 +881,8 @@ export default function App() {
             className="absolute top-0 left-0 z-30 hidden h-full w-2 cursor-col-resize touch-none transition-colors hover:bg-accent/25 focus-visible:bg-accent/25 lg:block"
           />
           <StatsPanel
+            sessionName={activeSession?.name ?? "Session"}
+            eventLabel={puzzleById(puzzle).short}
             stats={stats}
             trend={trend}
             disabled={running}
@@ -591,10 +890,13 @@ export default function App() {
           />
 
           <SolveList
-            solves={solves}
+            solves={sessionSolves}
             onPenalty={applyPenalty}
             onDelete={deleteSolve}
-            onReset={() => setDialog("reset")}
+            onDeleteMany={deleteSolves}
+            onReset={requestReset}
+            undo={undoBuffer ? { count: undoBuffer.solves.length } : null}
+            onUndo={undoDelete}
           />
         </aside>
       </main>
@@ -605,29 +907,46 @@ export default function App() {
         onChange={updateSettings}
         onClose={() => setDialog(null)}
         onExport={() => openDialog("export")}
-        onBackup={() => downloadText(backupFilename(), buildBackupJson(solves))}
-        onImport={importSolves}
-        onReset={() => openDialog("reset")}
+        onBackup={backup}
+        onImport={importSolveGroups}
+        onReset={requestReset}
       />
 
-      <StatsDialog open={dialog === "stats"} onClose={() => setDialog(null)} stats={stats} />
+      <StatsDialog
+        open={dialog === "stats"}
+        onClose={() => setDialog(null)}
+        sessions={sessions}
+        solves={solves}
+        puzzle={puzzle}
+        activeSession={activeSession}
+        onOpenSession={openSession}
+        onNewSession={startSession}
+        onDeleteSession={requestDeleteSession}
+        onRenameSession={renameSession}
+      />
 
       <ExportDialog
         open={dialog === "export"}
         onClose={() => setDialog(null)}
         text={exportText}
         solveCount={solves.length}
+        sessionCount={sessions.length}
+        onBackup={backup}
       />
 
       <HelpDialog open={dialog === "help"} onClose={() => setDialog(null)} />
 
       <ConfirmDialog
-        open={dialog === "reset"}
-        title="Reset session?"
-        description="This permanently deletes every solve in this browser. Export first if you want to keep a copy."
-        confirmLabel="Reset session"
-        onConfirm={resetSession}
-        onClose={() => setDialog(null)}
+        open={confirmation !== null}
+        title={confirmation?.title ?? ""}
+        description={confirmation?.description ?? ""}
+        confirmLabel={confirmation?.confirmLabel ?? "Confirm"}
+        onConfirm={() => {
+          const action = confirmation?.action;
+          setConfirmation(null);
+          action?.();
+        }}
+        onClose={() => setConfirmation(null)}
       />
     </div>
   );

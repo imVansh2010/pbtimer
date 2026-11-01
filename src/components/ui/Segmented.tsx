@@ -11,7 +11,7 @@ interface SegmentedProps<T extends string> {
   onChange: (value: T) => void;
   disabled?: boolean;
   label: string;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   className?: string;
 }
 
@@ -51,7 +51,9 @@ export function Segmented<T extends string>({
               "disabled:cursor-not-allowed",
               size === "sm"
                 ? "h-6 px-2 text-[10.5px] pointer-coarse:h-9 pointer-coarse:px-3"
-                : "h-7 px-3 text-[11.5px] pointer-coarse:h-10 pointer-coarse:px-4",
+                : size === "lg"
+                  ? "h-9 px-3.5 text-[12.5px] pointer-coarse:h-11 pointer-coarse:px-5"
+                  : "h-7 px-3 text-[11.5px] pointer-coarse:h-10 pointer-coarse:px-4",
               selected ? selectedClass : "text-faint hover:text-chalk-dim hover:bg-white/[0.04]",
             )}
           >

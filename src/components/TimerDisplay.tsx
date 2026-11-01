@@ -9,8 +9,14 @@ interface TimerDisplayProps {
   inspecting: boolean;
   inspectionLeft: number | null;
   hideRunningTime: boolean;
+  /** WCA inspection is on, so a press is about to start the countdown. */
+  inspectionEnabled: boolean;
   /** Penalty on the solve that was just recorded. */
   penalty: Penalty;
+  /** Inspection or a running attempt: the digits step up and own the screen. */
+  zoomed?: boolean;
+  /** The solve on screen was deleted, so the digits stay but are marked. */
+  deleted?: boolean;
 }
 
 /**
@@ -25,9 +31,18 @@ export function TimerDisplay({
   inspecting,
   inspectionLeft,
   hideRunningTime,
+  inspectionEnabled,
   penalty,
+  zoomed = false,
+  deleted = false,
 }: TimerDisplayProps) {
-  const showCountdown = inspecting && status !== "ready";
+  // With inspection on, the press that begins it must not show the previous
+  // solve first: a quick tap would flash that time for a frame before the
+  // countdown replaced it. The countdown's starting value stands in instead.
+  const pendingInspection = inspectionEnabled && !inspecting && status === "holding";
+  // The countdown survives arming: replacing it with 0.00 the moment the timer
+  // turned green put a different number on screen just before the solve began.
+  const showCountdown = inspecting || pendingInspection;
   const overInspection = showCountdown && inspectionLeft !== null && inspectionLeft <= 0;
   const warning =
     showCountdown && inspectionLeft !== null && inspectionLeft <= 3 && inspectionLeft > 0;
@@ -44,8 +59,9 @@ export function TimerDisplay({
   // don't change while space is held to arm, which used to flash 0.00 on the way
   // into inspection.
   const settled = !showCountdown && status !== "running" && elapsed > 0;
-  const plus2 = settled && penalty === "plus2";
-  const dnf = settled && penalty === "dnf";
+  const removed = settled && deleted;
+  const plus2 = settled && !removed && penalty === "plus2";
+  const dnf = settled && !removed && penalty === "dnf";
 
   const value = showCountdown
     ? countdown
@@ -59,12 +75,29 @@ export function TimerDisplay({
       ? "text-warn"
       : dnf
         ? "text-bad"
-        : status === "ready"
-          ? "text-good"
-          : "text-chalk";
+        : removed
+          ? "text-muted"
+          : status === "ready"
+            ? "text-good"
+            : "text-chalk";
 
-  const caption = showCountdown ? "inspection" : plus2 ? "+2" : dnf ? "DNF" : "";
-  const armed = status === "ready";
+  const caption = showCountdown
+    ? "inspection"
+    : removed
+      ? "deleted"
+      : plus2
+        ? "+2"
+        : dnf
+          ? "DNF"
+          : "";
+  // One scale value, so arming and focusing cannot fight over the transform.
+  // Arming always happens while focused, so it only needs the armed step. That
+  // step is deliberately small: a large one widened the ink past the layout
+  // box, which both clipped the digits and left a scrollbar. It only applies
+  // from `sm` up, because on a phone the digits already fill their column and
+  // any extra width there is what used to force a horizontal scrollbar.
+  const scale =
+    status === "ready" ? "scale-[1.045] sm:scale-[1.07]" : zoomed ? "sm:scale-[1.03]" : "";
   // A time with a minutes field is three glyphs longer, so it steps down a size
   // rather than overflowing the column it sits in.
   const longValue = value.length >= 6;
@@ -81,11 +114,13 @@ export function TimerDisplay({
             ? overInspection
               ? "text-bad"
               : "text-faint"
-            : plus2
-              ? "text-warn"
-              : dnf
-                ? "text-bad"
-                : "text-transparent",
+            : removed
+              ? "text-bad"
+              : plus2
+                ? "text-warn"
+                : dnf
+                  ? "text-bad"
+                  : "text-transparent",
         )}
       >
         {caption || "inspection"}
@@ -110,10 +145,14 @@ export function TimerDisplay({
           // Container width sets the size, but a short window (a phone held in
           // landscape) caps it by height so the digits can never outgrow the screen.
           "transition-[color,scale] duration-150 ease-out",
+          // The `cqw` ratios are the ones that were tuned to fit the longest
+          // string the class allows; the rem ceiling is what can grow. A wider
+          // timer column (and the panel collapsing during a solve) therefore
+          // makes the digits bigger without ever pushing them out of their box.
           longValue
-            ? "text-[clamp(4.4rem,min(26.4cqw,33svh),13.5rem)] sm:text-[clamp(4.15rem,min(25.4cqw,33svh),13.5rem)]"
-            : "text-[clamp(5.4rem,min(30.8cqw,37svh),15.4rem)] sm:text-[clamp(4.9rem,min(28.9cqw,37svh),15.4rem)]",
-          armed && "scale-[1.045]",
+            ? "text-[clamp(4.4rem,min(26.4cqw,33svh),16rem)] sm:text-[clamp(4.15rem,min(25.4cqw,33svh),16rem)]"
+            : "text-[clamp(5.4rem,min(30.8cqw,37svh),18rem)] sm:text-[clamp(4.9rem,min(28.9cqw,37svh),18rem)]",
+          scale,
           tone,
         )}
       >

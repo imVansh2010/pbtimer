@@ -10,7 +10,7 @@ interface ModalProps {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   /** `lg` is for the one dialog with a tab strip under the title. */
   titleSize?: "md" | "lg";
 }
@@ -24,6 +24,7 @@ const widths = {
   sm: "sm:max-w-sm",
   md: "sm:max-w-md",
   lg: "sm:max-w-2xl",
+  xl: "sm:max-w-3xl",
 };
 
 const FOCUSABLE =
@@ -37,6 +38,11 @@ const EXIT_MS = 200;
    outgoing dialog would hand the page back its scrollbar underneath the new one. */
 let scrollLocks = 0;
 let savedOverflow = "";
+
+/* Dialogs can stack — a confirmation over Settings, for instance. Only the
+   newest one may answer Escape or run the focus trap, otherwise one keypress
+   would close the dialog underneath as well. */
+const modalStack: symbol[] = [];
 
 function lockScroll(): () => void {
   if (scrollLocks === 0) {
@@ -63,6 +69,7 @@ export function Modal({
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  const instanceRef = useRef<symbol>(Symbol("modal"));
   const titleId = useId();
 
   // `visible` keeps the panel mounted through its exit animation; `exiting`
@@ -115,8 +122,19 @@ export function Modal({
 
   useEffect(() => {
     if (!open) return;
+    const instance = instanceRef.current;
+    modalStack.push(instance);
+    return () => {
+      const index = modalStack.lastIndexOf(instance);
+      if (index >= 0) modalStack.splice(index, 1);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
 
     function onKeyDown(event: KeyboardEvent) {
+      if (modalStack[modalStack.length - 1] !== instanceRef.current) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();

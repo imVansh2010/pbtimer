@@ -181,8 +181,36 @@ export function useTimer(options: UseTimerOptions) {
   pressRef.current = press;
   releaseRef.current = release;
 
+  /**
+   * Drops a press that never became a real release, such as a pointer the
+   * browser cancelled. Releasing in that case would start the solve, so the
+   * press is unwound instead and the next one behaves normally.
+   */
+  const abortPress = useCallback(() => {
+    ignoreRelease.current = false;
+    if (holdTimer.current !== null) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+    if (statusRef.current === "holding" || statusRef.current === "ready") {
+      setPhase("idle");
+    }
+  }, []);
+
   const cancelInspection = useCallback(() => {
-    if (!inspectingRef.current) return;
+    const wasInspecting = inspectingRef.current;
+    const wasArmed = statusRef.current === "holding" || statusRef.current === "ready";
+    if (!wasInspecting && !wasArmed) return;
+
+    // A press that is still waiting to arm must not survive the cancel, or the
+    // timer would turn green a moment later with no attempt behind it.
+    if (holdTimer.current !== null) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+    if (wasArmed) setPhase("idle");
+    if (!wasInspecting) return;
+
     inspectingRef.current = false;
     penaltyRef.current = "ok";
     shownSecond.current = null;
@@ -190,7 +218,6 @@ export function useTimer(options: UseTimerOptions) {
     setInspecting(false);
     setInspectionLeft(null);
     setElapsed(0);
-    setPhase("idle");
   }, []);
 
   // Opening a dialog must not leave the timer half-armed.
@@ -268,6 +295,7 @@ export function useTimer(options: UseTimerOptions) {
     inspectionLeft,
     press,
     release,
+    abortPress,
     cancelInspection,
   };
 }
