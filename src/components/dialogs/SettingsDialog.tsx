@@ -31,7 +31,8 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 const SHORTCUTS: Array<{ keys: string[]; action: string }> = [
-  { keys: ["space"], action: "Hold to arm · release to start / stop" },
+  { keys: ["space"], action: "Hold to arm, release to start" },
+  { keys: ["any"], action: "Stop a running solve" },
   { keys: ["N"], action: "New scramble" },
   { keys: ["2"], action: "Mark last solve +2" },
   { keys: ["D"], action: "Mark last solve DNF" },
@@ -123,7 +124,7 @@ export function SettingsDialog({
       open={open}
       onClose={onClose}
       title="Settings"
-      description="Tune the timer to your solving style."
+      description="Timer settings and your data."
       size="md"
       titleSize="lg"
     >
@@ -176,7 +177,7 @@ export function SettingsDialog({
               <span className="text-[12px] text-faint">{accent.label}</span>
             </div>
             <p className="mb-6 text-[13px] leading-[1.5] text-faint">
-              Drives buttons, the wordmark, highlights, the timer glow and the trend line.
+              Colours buttons, highlights, the timer glow and the trend line.
             </p>
             <div role="radiogroup" aria-label="Accent colour" className="flex flex-wrap gap-4">
               {ACCENTS.map((option) => {
@@ -216,13 +217,13 @@ export function SettingsDialog({
           <section className="divide-y divide-white/[0.05]">
             <Toggle
               label="WCA inspection"
-              description="15-second countdown before each attempt. Over 15s is +2, over 17s is a DNF."
+              description="15-second countdown before each solve. Over 15s is +2, over 17s a DNF."
               checked={settings.inspection}
               onChange={(inspection) => onChange({ inspection })}
             />
             <Toggle
               label="Hide the time while solving"
-              description="The digits stay blank while the timer runs, and appear when you stop it."
+              description="Digits stay blank while you solve and appear when you stop."
               checked={settings.hideRunningTime}
               onChange={(hideRunningTime) => onChange({ hideRunningTime })}
             />
@@ -230,7 +231,7 @@ export function SettingsDialog({
               <div className="min-w-0">
                 <div className="text-[14px] font-medium text-chalk">Hold to arm</div>
                 <p className="mt-1 text-[12.5px] leading-[1.5] text-faint">
-                  How long space must be held before the timer turns green.
+                  How long to hold before the timer turns green.
                 </p>
               </div>
               <Segmented
@@ -296,13 +297,12 @@ export function SettingsDialog({
               <strong className="font-medium text-chalk-dim">Export log</strong> writes a readable
               .txt grouped by session;{" "}
               <strong className="font-medium text-chalk-dim">Back up</strong> writes a .json with
-              the sessions and every solve. Import accepts either file and files what it finds into
-              new sessions, so nothing blends into the session you are timing.
+              the sessions and every solve. Import takes either file and puts the solves into new
+              sessions, away from the one you are timing.
             </p>
             <p className="mt-2.5 text-[13px] leading-[1.6] text-faint">
-              Solves, settings and the selected puzzle live in this browser only and nothing is
-              uploaded. Back up regularly, because clearing site data deletes the local copy for
-              good.
+              Everything lives in this browser; nothing is uploaded. Back up regularly — clearing
+              site data deletes the local copy.
             </p>
           </section>
         ) : null}
@@ -324,7 +324,7 @@ export function SettingsDialog({
               ))}
             </ul>
             <p className="mt-4 text-[12.5px] leading-[1.5] text-faint">
-              Space always drives the timer — it stops a solve even when a button has focus.
+              Any key stops a running solve, even when a button has focus.
             </p>
           </section>
         ) : null}

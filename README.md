@@ -15,7 +15,7 @@ A quiet, precise speedcubing timer. WCA scrambles, 15-second inspection, real av
 - **Session insights** — best and worst single, mean, standard deviation, DNF rate and a trend chart.
 - **Cube state preview** — a 2D net shows the scramble applied to a solved cube (2×2, 3×3).
 - **Full solve history** — every solve stores its scramble; apply +2 / DNF or delete in one click.
-- **Keyboard-first** — space to time, `N` for a new scramble, `2` / `D` for penalties, `Del` to remove.
+- **Keyboard-first** — space to start, any key to stop, `N` for a new scramble, `2` / `D` for penalties, `Del` to remove.
 - **Export and backup** — readable text log, JSON backup and import that merges without duplicates.
 - **Local-first** — solves, settings and the selected puzzle live in your browser; no account, no uploads.
 
@@ -56,16 +56,17 @@ npm run preview
 
 ## Usage
 
-Hold <kbd>space</kbd> — or press and hold the timer — until the digits turn green, then release to start. Any press stops the timer. With inspection enabled, the countdown runs first.
+Hold <kbd>space</kbd> — or press and hold anywhere on the timer area — until the digits turn green, then release to start. Any press stops the timer, and any key does too. With inspection enabled, a tap on the timer area starts the countdown first.
 
-| Key     | Action                                       |
-| ------- | -------------------------------------------- |
-| `space` | Hold to arm, release to start, press to stop |
-| `N`     | New scramble                                 |
-| `2`     | Mark last solve +2                           |
-| `D`     | Mark last solve DNF                          |
-| `Del`   | Delete last solve                            |
-| `Esc`   | Cancel inspection or close a dialog          |
+| Key     | Action                              |
+| ------- | ----------------------------------- |
+| `space` | Hold to arm, release to start       |
+| any key | Stop a running solve                |
+| `N`     | New scramble                        |
+| `2`     | Mark last solve +2                  |
+| `D`     | Mark last solve DNF                 |
+| `Del`   | Delete last solve                   |
+| `Esc`   | Cancel inspection or close a dialog |
 
 ## Development
 

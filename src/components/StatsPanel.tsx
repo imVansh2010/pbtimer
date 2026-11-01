@@ -161,7 +161,7 @@ function TrendChart({ values }: { values: number[] }) {
         </svg>
       ) : (
         <div className="flex h-full items-center text-[10.5px] text-faint">
-          Two solves and your trend appears here.
+          Your trend appears after two solves.
         </div>
       )}
     </div>

@@ -39,9 +39,9 @@ export function ExportDialog({
       open={open}
       onClose={onClose}
       title="Export solves"
-      description={`${solveCount} solve${solveCount === 1 ? "" : "s"} across ${sessionCount} session${
+      description={`${solveCount} solve${solveCount === 1 ? "" : "s"} in ${sessionCount} session${
         sessionCount === 1 ? "" : "s"
-      } — a readable log that can be imported back as new sessions.`}
+      }, as a readable log. Import it back as new sessions.`}
       size="lg"
       footer={
         <>

@@ -163,12 +163,15 @@ export default function App() {
   });
 
   const [panelWidth, setPanelWidth] = useState<number>(() => {
-    const stored = readStore<unknown>(STORAGE_KEYS.panel, DEFAULT_PANEL);
-    return clampPanel(
-      typeof stored === "number" && Number.isFinite(stored) ? stored : DEFAULT_PANEL,
-    );
+    // A tablet has no pointer to aim with, so the panel starts as narrow as it
+    // goes and the timer takes the rest of the screen; dragging widens it.
+    const fallback = readCoarsePointer() ? PANEL_MIN : DEFAULT_PANEL;
+    const stored = readStore<unknown>(STORAGE_KEYS.panel, fallback);
+    return clampPanel(typeof stored === "number" && Number.isFinite(stored) ? stored : fallback);
   });
   const resizeFrom = useRef<{ x: number; width: number } | null>(null);
+  /** True while a press that started on the stage is still waiting for its up. */
+  const stagePress = useRef(false);
 
   const { scramble, loading, next: nextScramble } = useScramble(puzzle);
 
@@ -509,9 +512,9 @@ export default function App() {
       const owned = solvesOfSession(solves, session.id);
       setConfirmation({
         title: `Delete ${session.name}?`,
-        description: `${owned.length} solve${owned.length === 1 ? "" : "s"} in ${session.name} (${
-          puzzleById(session.puzzle).label
-        }) will be deleted. Export first if you want to keep a copy.`,
+        description: `Deletes the ${owned.length} solve${owned.length === 1 ? "" : "s"} in ${
+          session.name
+        } (${puzzleById(session.puzzle).label}). Export first if you want a copy.`,
         confirmLabel: "Delete session",
         action: () => {
           const removedSettled =
@@ -535,7 +538,7 @@ export default function App() {
     setConfirmation({
       title: "Reset everything?",
       description:
-        "This permanently deletes every solve and every session in this browser. Export first if you want to keep a copy.",
+        "Deletes every solve and session in this browser, for good. Export first if you want to keep a copy.",
       confirmLabel: "Reset everything",
       action: () => {
         setSolves([]);
@@ -639,18 +642,16 @@ export default function App() {
       if (timer.status === "ready") return "Release to start the solve";
       return touch ? "Hold until the timer turns green" : "Hold space until the timer turns green";
     }
-    if (timer.status === "running") return touch ? "Tap the timer to stop" : "Press space to stop";
+    if (timer.status === "running") return touch ? "Tap anywhere to stop" : "Press any key to stop";
     if (timer.status === "ready") return "Release to start";
     if (timer.status === "holding") return "Keep holding…";
     if (timer.status === "stopped") {
-      return touch ? "Tap the timer for the next solve" : "Press space for the next solve";
+      return touch ? "Tap anywhere for the next solve" : "Press space for the next solve";
     }
     if (settings.inspection) {
-      return touch ? "Tap the timer to begin inspection" : "Tap space to begin inspection";
+      return touch ? "Tap anywhere to begin inspection" : "Tap space to begin inspection";
     }
-    return touch
-      ? "Hold the timer to arm, release to start"
-      : "Hold space to arm, release to start";
+    return touch ? "Hold anywhere to arm, release to start" : "Hold space to arm, release to start";
   })();
   // A dialog would cover a running timer and leave it unstoppable.
   const openDialog = useCallback(
@@ -685,6 +686,53 @@ export default function App() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }, []);
+
+  /**
+   * The stage as a whole is the timer: pressing almost anywhere arms it, and on
+   * a touch screen a tap begins inspection outright. Anything interactive keeps
+   * its own presses, and a press that started elsewhere never releases one here.
+   */
+  function onStagePointerDown(event: ReactPointerEvent<HTMLElement>) {
+    if (event.button !== 0) return;
+
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest("button, a, input, select, textarea, [role='separator'], [role='listbox']")
+    ) {
+      return;
+    }
+
+    // A finger rarely gives a clean press and release: the layout moves under
+    // it, and the browser may cancel the pointer. Starting inspection on the
+    // press itself is what makes a single tap enough.
+    if (
+      touch &&
+      settings.inspection &&
+      !timer.inspecting &&
+      (timer.status === "idle" || timer.status === "stopped")
+    ) {
+      timer.startInspection();
+      return;
+    }
+
+    // Captured, so the release still arrives if the layout shifts mid-press.
+    event.currentTarget.setPointerCapture(event.pointerId);
+    stagePress.current = true;
+    timer.press();
+  }
+
+  function onStagePointerUp() {
+    if (!stagePress.current) return;
+    stagePress.current = false;
+    timer.release();
+  }
+
+  function onStagePointerCancel() {
+    if (!stagePress.current) return;
+    stagePress.current = false;
+    timer.abortPress();
+  }
 
   return (
     <div className="relative flex min-h-dvh flex-col bg-ink-950 lg:h-dvh lg:overflow-hidden">
@@ -733,10 +781,14 @@ export default function App() {
         {/* Closing a dialog must give the page back exactly as it was, so the
             stage only changes layout while an attempt is actually in progress. */}
         <section
+          onPointerDown={onStagePointerDown}
+          onPointerUp={onStagePointerUp}
+          onPointerCancel={onStagePointerCancel}
           className={cn(
             // `overflow-x-clip` keeps a sub-pixel of glyph overflow from ever
-            // producing a horizontal scrollbar under the timer.
-            "@container relative min-h-[calc(100svh-6.5rem)] overflow-x-clip sm:min-h-[calc(100svh-7rem)] lg:min-h-0 lg:overflow-y-auto",
+            // producing a horizontal scrollbar under the timer. `manipulation`
+            // removes the double-tap zoom without blocking a scroll.
+            "@container relative touch-manipulation select-none min-h-[calc(100svh-6.5rem)] overflow-x-clip sm:min-h-[calc(100svh-7rem)] lg:min-h-0 lg:overflow-y-auto",
             // While focusing the stage stops being a three-row grid and becomes
             // a single column holding only the timer, which then fills it. With
             // the panel collapsed too (below), the digits are centred in the
@@ -776,20 +828,11 @@ export default function App() {
               focusing && "relative z-10 flex-1 py-0",
             )}
           >
-            <div
-              role="presentation"
-              onPointerDown={(event) => {
-                if (event.button !== 0) return;
-                event.currentTarget.setPointerCapture(event.pointerId);
-                timer.press();
-              }}
-              onPointerUp={() => timer.release()}
-              onPointerCancel={() => timer.abortPress()}
-              className="w-full max-w-[1100px] cursor-pointer touch-none select-none rounded-2xl px-2 py-3 @container"
-            >
+            <div className="w-full max-w-[1100px] cursor-pointer rounded-2xl px-2 py-3 @container">
               <TimerDisplay
                 status={timer.status}
                 elapsed={timer.elapsed}
+                clock={timer.clock}
                 inspecting={timer.inspecting}
                 inspectionLeft={timer.inspectionLeft}
                 hideRunningTime={settings.hideRunningTime}
@@ -847,14 +890,10 @@ export default function App() {
           </div>
         </section>
 
-        <aside
-          className={cn(
-            "relative min-h-0 flex-col border-t border-white/[0.055] bg-ink-950/50 lg:overflow-hidden lg:border-l lg:border-t-0",
-            // Out of the layout while focusing, so the collapsed column cannot
-            // overflow and the digits centre on the whole screen.
-            focusing ? "hidden" : "flex",
-          )}
-        >
+        {/* Sitting on the seam rather than inside the panel: a finger needs a
+            wide target, but every pixel of the strip over the panel is a pixel
+            of a solve row that cannot be tapped. */}
+        {focusing ? null : (
           <div
             role="separator"
             aria-label="Resize side panel"
@@ -864,6 +903,7 @@ export default function App() {
             aria-valuemax={PANEL_MAX}
             tabIndex={0}
             title="Drag to resize · double-click to reset"
+            style={{ right: "var(--panel-width)" } as CSSProperties}
             onPointerDown={startResize}
             onPointerMove={moveResize}
             onPointerUp={endResize}
@@ -878,8 +918,24 @@ export default function App() {
                 setPanelWidth((width) => clampPanel(width - 16));
               }
             }}
-            className="absolute top-0 left-0 z-30 hidden h-full w-2 cursor-col-resize touch-none transition-colors hover:bg-accent/25 focus-visible:bg-accent/25 lg:block"
-          />
+            className="absolute top-0 bottom-0 z-30 hidden w-2 translate-x-1/2 cursor-col-resize touch-none transition-colors hover:bg-accent/25 focus-visible:bg-accent/25 pointer-coarse:w-6 lg:block"
+          >
+            {/* Drawn, because a handle nobody can see is a handle nobody uses. */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-1/2 h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/15 pointer-coarse:bg-white/30"
+            />
+          </div>
+        )}
+
+        <aside
+          className={cn(
+            "relative min-h-0 flex-col border-t border-white/[0.055] bg-ink-950/50 lg:overflow-hidden lg:border-l lg:border-t-0",
+            // Out of the layout while focusing, so the collapsed column cannot
+            // overflow and the digits centre on the whole screen.
+            focusing ? "hidden" : "flex",
+          )}
+        >
           <StatsPanel
             sessionName={activeSession?.name ?? "Session"}
             eventLabel={puzzleById(puzzle).short}

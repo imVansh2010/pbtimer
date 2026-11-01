@@ -54,7 +54,7 @@ export const TrendChart = memo(function TrendChart({
         style={{ height }}
         className="flex items-center justify-center rounded-xl border border-white/[0.055] bg-ink-950/40 px-3 text-center text-[11.5px] text-faint"
       >
-        Two solves and this chart draws itself.
+        Your trend appears after two solves.
       </div>
     );
   }

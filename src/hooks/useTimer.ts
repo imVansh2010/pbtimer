@@ -1,10 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Penalty } from "../lib/types";
 
 export type TimerStatus = "idle" | "holding" | "ready" | "running" | "stopped";
 
+/**
+ * The running clock, sampled outside React. Elapsed time changes every frame,
+ * and putting it in state re-rendered the whole app sixty times a second, which
+ * is what made the hundredths stutter on a tablet. The digits subscribe here
+ * instead, so a frame only re-renders them.
+ */
+export interface TimerClock {
+  subscribe(listener: () => void): () => void;
+  /** Elapsed time in centiseconds: the precision the digits actually show. */
+  read(): number;
+}
+
 const INSPECTION_MS = 15_000;
 const INSPECTION_DNF_MS = 17_000;
+
+/** Modifier presses are not "any key": they never end a solve. */
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
 
 export interface UseTimerOptions {
   /** WCA inspection before each attempt. */
@@ -35,6 +50,30 @@ export function useTimer(options: UseTimerOptions) {
   const ignoreRelease = useRef(false);
   /** Currently displayed whole second of inspection, to avoid idle re-renders. */
   const shownSecond = useRef<number | null>(null);
+
+  const liveCentis = useRef(0);
+  const clockListeners = useRef(new Set<() => void>());
+
+  const clock = useMemo<TimerClock>(
+    () => ({
+      subscribe(listener) {
+        clockListeners.current.add(listener);
+        return () => {
+          clockListeners.current.delete(listener);
+        };
+      },
+      read: () => liveCentis.current,
+    }),
+    [],
+  );
+
+  /** Publishes a time at the precision shown, so equal hundredths cost nothing. */
+  function publishLive(ms: number) {
+    const centis = Math.floor(ms / 10);
+    if (centis === liveCentis.current) return;
+    liveCentis.current = centis;
+    for (const listener of clockListeners.current) listener();
+  }
 
   function setPhase(next: TimerStatus) {
     statusRef.current = next;
@@ -68,19 +107,26 @@ export function useTimer(options: UseTimerOptions) {
     }
 
     startAt.current = start;
+    liveCentis.current = 0;
     setElapsed(0);
     setPhase("running");
     startLoop();
   }
 
-  function stopRun() {
+  /**
+   * `swallowRelease` is for the press that stopped the clock — the pointer up
+   * or space keyup that belongs to it must not start a new attempt. Any other
+   * key stops without a release of its own, so nothing is swallowed.
+   */
+  function stopRun(swallowRelease = true) {
     const ms = performance.now() - startAt.current;
     if (ms < 40) return;
 
     stopLoop();
+    liveCentis.current = Math.floor(ms / 10);
     setElapsed(ms);
     setPhase("stopped");
-    ignoreRelease.current = true;
+    ignoreRelease.current = swallowRelease;
 
     const penalty = penaltyRef.current;
     penaltyRef.current = "ok";
@@ -118,7 +164,7 @@ export function useTimer(options: UseTimerOptions) {
         }
       }
     } else if (statusRef.current === "running") {
-      setElapsed(now - startAt.current);
+      publishLive(now - startAt.current);
     }
 
     if (raf.current === null && (inspectingRef.current || statusRef.current === "running")) {
@@ -178,8 +224,10 @@ export function useTimer(options: UseTimerOptions) {
   // the newest closures through refs instead of re-registering every render.
   const pressRef = useRef(press);
   const releaseRef = useRef(release);
+  const stopRef = useRef(stopRun);
   pressRef.current = press;
   releaseRef.current = release;
+  stopRef.current = stopRun;
 
   /**
    * Drops a press that never became a real release, such as a pointer the
@@ -218,6 +266,7 @@ export function useTimer(options: UseTimerOptions) {
     setInspecting(false);
     setInspectionLeft(null);
     setElapsed(0);
+    liveCentis.current = 0;
   }, []);
 
   // Opening a dialog must not leave the timer half-armed.
@@ -232,7 +281,7 @@ export function useTimer(options: UseTimerOptions) {
     }
   }, [options.active]);
 
-  // Space bar is the primary control.
+  // Space starts an attempt; any other key ends a running one.
   useEffect(() => {
     function isTextInput(target: EventTarget | null): boolean {
       if (!(target instanceof HTMLElement)) return false;
@@ -244,13 +293,22 @@ export function useTimer(options: UseTimerOptions) {
       );
     }
 
-    /** Space is the timer's key everywhere except inside a text field. */
     function onKeyDown(event: KeyboardEvent) {
-      if (!optionsRef.current.active) return;
-      if (event.code !== "Space" || isTextInput(event.target)) return;
+      if (!optionsRef.current.active || isTextInput(event.target)) return;
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (event.repeat) return;
+        pressRef.current();
+        return;
+      }
+
+      // Reaching for a key is the reflex that stops a solve, so every key does
+      // it — not just space. Modifiers alone do not count.
+      if (event.repeat || MODIFIER_KEYS.has(event.key)) return;
+      if (statusRef.current !== "running") return;
       event.preventDefault();
-      if (event.repeat) return;
-      pressRef.current();
+      stopRef.current(false);
     }
 
     function onKeyUp(event: KeyboardEvent) {
@@ -293,9 +351,11 @@ export function useTimer(options: UseTimerOptions) {
     elapsed,
     inspecting,
     inspectionLeft,
+    clock,
     press,
     release,
     abortPress,
+    startInspection,
     cancelInspection,
   };
 }

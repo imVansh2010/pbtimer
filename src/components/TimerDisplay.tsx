@@ -1,11 +1,15 @@
+import { useSyncExternalStore } from "react";
 import { cn } from "../lib/cn";
 import { formatTime } from "../lib/format";
-import type { TimerStatus } from "../hooks/useTimer";
+import type { TimerClock, TimerStatus } from "../hooks/useTimer";
 import type { Penalty } from "../lib/types";
 
 interface TimerDisplayProps {
   status: TimerStatus;
+  /** The finished time. While running the digits read the clock instead. */
   elapsed: number;
+  /** Fires only when the hundredths change, so the rest of the app stays still. */
+  clock: TimerClock;
   inspecting: boolean;
   inspectionLeft: number | null;
   hideRunningTime: boolean;
@@ -28,6 +32,7 @@ interface TimerDisplayProps {
 export function TimerDisplay({
   status,
   elapsed,
+  clock,
   inspecting,
   inspectionLeft,
   hideRunningTime,
@@ -54,6 +59,11 @@ export function TimerDisplay({
 
   const hidden = hideRunningTime && status === "running" && !showCountdown;
 
+  // Counted in hundredths, so the digits never re-render for a frame that lands
+  // inside the same hundredth.
+  const liveCentis = useSyncExternalStore(clock.subscribe, clock.read, () => 0);
+  const shown = status === "running" ? liveCentis * 10 : elapsed;
+
   // The solve still on screen keeps its time and penalty until the next attempt
   // takes over. Keyed off the elapsed value rather than the phase so the digits
   // don't change while space is held to arm, which used to flash 0.00 on the way
@@ -63,11 +73,7 @@ export function TimerDisplay({
   const plus2 = settled && !removed && penalty === "plus2";
   const dnf = settled && !removed && penalty === "dnf";
 
-  const value = showCountdown
-    ? countdown
-    : plus2
-      ? formatTime(elapsed + 2000)
-      : formatTime(elapsed);
+  const value = showCountdown ? countdown : plus2 ? formatTime(shown + 2000) : formatTime(shown);
 
   const tone = overInspection
     ? "text-bad"
@@ -131,7 +137,7 @@ export function TimerDisplay({
         aria-label={
           showCountdown
             ? `Inspection, ${countdown}${overInspection ? " seconds over" : " seconds remaining"}`
-            : `Timer ${formatTime(elapsed)}${plus2 ? ", plus two penalty" : dnf ? ", did not finish" : ""}`
+            : `Timer ${formatTime(shown)}${plus2 ? ", plus two penalty" : dnf ? ", did not finish" : ""}`
         }
         className={cn(
           // Inter at 400: proportional-pitch digits with tabular figures, no

@@ -53,7 +53,8 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 const SHORTCUTS: Array<{ keys: string[]; action: string }> = [
-  { keys: ["space"], action: "Hold to arm, release to start — any press stops" },
+  { keys: ["space"], action: "Hold to arm, release to start" },
+  { keys: ["any"], action: "Stops a running solve" },
   { keys: ["N"], action: "New scramble" },
   { keys: ["2"], action: "Last solve +2" },
   { keys: ["D"], action: "Last solve DNF" },
@@ -92,14 +93,17 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
       open={open}
       onClose={onClose}
       title="How pbtimer works"
-      description="Everything the timer does, in one place."
+      description="Timer, sessions, stats and backups."
       size="lg"
       titleSize="lg"
     >
+      {/* A scroll container clips at its padding edge, and the focus ring is
+          drawn outside the tab, so the strip keeps 6px of padding on every side.
+          The negative margins put the row back where it was. */}
       <div
         role="tablist"
         aria-label="Help sections"
-        className="-mx-1 mb-4 flex gap-1 overflow-x-auto px-1 pb-1"
+        className="-mx-1.5 -mt-1.5 mb-3.5 flex gap-1 overflow-x-auto p-1.5"
       >
         {TABS.map((entry, index) => {
           const selected = entry.id === tab;
@@ -146,40 +150,33 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
               title="Starting a solve"
             >
               <p>
-                Hold <kbd className="kbd">space</kbd> — or press and hold anywhere on the timer —
-                until the digits turn green, then release to start. Any press stops the timer.
+                Hold <kbd className="kbd">space</kbd>, or press anywhere on the timer, until the
+                digits turn green, then let go to start. Any press stops it.
               </p>
               <p>
-                The green delay is the{" "}
-                <strong className="font-medium text-chalk-dim">hold to arm</strong> setting, so a
-                stray tap can never start a solve. You can change it in Settings.
+                That green delay is the{" "}
+                <strong className="font-medium text-chalk-dim">hold to arm</strong> setting — it
+                keeps a stray tap from starting a solve. Change it in Settings.
               </p>
             </Section>
 
             <Section icon={<Eye className="size-3.5" aria-hidden="true" />} title="Inspection">
               <p>
-                With WCA inspection on, a 15-second countdown replaces the digits. At 15 seconds the
-                solve is <strong className="font-medium text-warn">+2</strong>; past 17 seconds it
-                is a <strong className="font-medium text-bad">DNF</strong> and the timer starts on
-                its own.
+                With WCA inspection on, a 15-second countdown takes over the digits. Past 15 seconds
+                the solve is <strong className="font-medium text-warn">+2</strong>; past 17 it is a{" "}
+                <strong className="font-medium text-bad">DNF</strong> and the timer starts itself.
               </p>
-              <p>
-                The countdown turns amber for the final three seconds and red once you are over. Esc
-                cancels inspection.
-              </p>
+              <p>Amber for the last three seconds, red once you are over. Esc cancels.</p>
             </Section>
 
             <Section
               icon={<SlidersHorizontal className="size-3.5" aria-hidden="true" />}
-              title="Making it yours"
+              title="Settings and the panel"
             >
+              <p>Settings has four tabs: Look, Timer, Data and Keys.</p>
               <p>
-                Settings is split into four sections — Look, Timer, Data and Keys — so related
-                options stay together as more are added.
-              </p>
-              <p>
-                On a desktop you can drag the divider on the left edge of the side panel to make it
-                wider or narrower; the width is remembered.
+                On a desktop, drag the divider at the side panel's left edge to resize it. The width
+                is remembered.
               </p>
             </Section>
           </>
@@ -189,20 +186,18 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           <>
             <Section
               icon={<ListOrdered className="size-3.5" aria-hidden="true" />}
-              title="Solves, penalties and the cube net"
+              title="Solves and the cube net"
             >
               <p>
-                Every attempt is saved with the scramble that produced it. The small 2D cube under
-                the timer shows the scramble applied to a solved cube (2×2 and 3×3 events); the
-                arrow in its bottom-left corner hides it, and clicking the arrow again pops it back
-                out. A +2 or DNF also shows above the finished time, in amber or red.
+                Every solve is saved with its scramble. The 2D cube under the timer shows that
+                scramble applied to a solved cube (2×2 and 3×3); the arrow in its corner hides it. A
+                +2 or DNF shows above the time in amber or red.
               </p>
               <p>
-                Every solve in the side panel carries{" "}
+                Each solve in the side panel has{" "}
                 <strong className="font-medium text-chalk-dim">+2</strong>,{" "}
-                <strong className="font-medium text-chalk-dim">DNF</strong> and delete buttons — one
-                click applies, and clicking +2 or DNF again returns it to OK. Click a solve to see
-                its scramble.
+                <strong className="font-medium text-chalk-dim">DNF</strong> and delete buttons.
+                Click +2 or DNF again to clear it; click a solve to see its scramble.
               </p>
             </Section>
 
@@ -211,15 +206,15 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
               title="Bulk delete and undo"
             >
               <p>
-                <strong className="font-medium text-chalk-dim">Select</strong> turns the solve list
-                into checkboxes: pick as many solves as you want with the rows, or{" "}
-                <strong className="font-medium text-chalk-dim">All</strong>, then delete them in one
-                go.
+                <strong className="font-medium text-chalk-dim">Select</strong> turns the list into
+                checkboxes: tick rows, or{" "}
+                <strong className="font-medium text-chalk-dim">All</strong>, then delete them
+                together.
               </p>
               <p>
-                Any delete stays reversible for five seconds — an Undo button appears in the panel.
-                If the deleted solve is the one on the timer, the digits stay and are marked{" "}
-                <strong className="font-medium text-bad">deleted</strong> until the next attempt.
+                Any delete can be undone for five seconds from the panel. If the deleted solve is
+                the one on the timer, its time stays, marked{" "}
+                <strong className="font-medium text-bad">deleted</strong>, until the next attempt.
               </p>
             </Section>
           </>
@@ -229,18 +224,16 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           <>
             <Section icon={<Layers className="size-3.5" aria-hidden="true" />} title="Sessions">
               <p>
-                Each event keeps as many sessions as you like. The session button in the header
-                lists them for the event you are on: start a new one whenever you want a clean
-                slate, and the old one stays exactly as it was.
+                Every event can have as many sessions as you like. Start one from the session button
+                in the header whenever you want a clean slate; the old one stays as it was.
               </p>
               <p>
-                Rename a session with the pencil beside it in that list, or from the statistics
-                Sessions tab, where you can also delete a session and all of its solves.
+                Rename or delete one with the pencil and bin in that list, or from the Sessions tab
+                in Statistics. Deleting a session takes its solves with it.
               </p>
               <p>
-                The side panel always shows the open session. Statistics shows that session on its
-                own or every session of the same event, and its Sessions tab lets you jump back into
-                any of them.
+                The side panel always shows the open session. Statistics can show that session alone
+                or every session of the event.
               </p>
             </Section>
           </>
@@ -249,23 +242,21 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
         {tab === "stats" ? (
           <Section
             icon={<ChartNoAxesColumn className="size-3.5" aria-hidden="true" />}
-            title="Averages and statistics"
+            title="Averages"
           >
             <p>
-              Averages use WCA rules: the fastest and slowest solves are dropped, DNFs count as the
-              slowest, and two or more DNFs make the average a DNF. Averages need five or twelve
-              solves before they appear.
+              Averages use WCA rules: drop the fastest and slowest, count a DNF as the slowest, and
+              two DNFs make the average a DNF. Ao5 needs five solves, ao12 twelve.
             </p>
             <p>
-              Open the chart icon in the header for best, current and worst averages, a trend chart,
-              a spread histogram and a session browser. The switch at the top chooses between the
-              open session and every session of the current event.
+              The chart button in the header opens the full statistics: averages, trend, spread and
+              sessions. The switch at the top picks the open session or the whole event.
             </p>
             <p>
-              Personal bests announce themselves in the header and say whether they are a{" "}
+              A personal best shows in the header as a{" "}
               <strong className="font-medium text-chalk-dim">session PB</strong> or an{" "}
-              <strong className="font-medium text-chalk-dim">all-time PB</strong> for the event —
-              same for ao5, ao12, ao50 and ao100.
+              <strong className="font-medium text-chalk-dim">all-time PB</strong>, for singles and
+              averages alike.
             </p>
           </Section>
         ) : null}
@@ -277,24 +268,25 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
               title="Export & import"
             >
               <p>
-                Settings → Data writes a plain-text log grouped by session — times, penalties, exact
-                dates and every scramble — which you can download or copy to the clipboard.
+                <strong className="font-medium text-chalk-dim">Export log</strong> in Settings →
+                Data writes a plain-text log grouped by session: times, penalties, dates and
+                scrambles. Download or copy it.
               </p>
               <p>
-                The .json backup next to it restores everything on another device, sessions and
-                dates included. Import reads either file and adds what it finds as new sessions,
-                skipping solves you already have.
+                <strong className="font-medium text-chalk-dim">Back up</strong> writes a .json with
+                everything, sessions included. Import takes either file and puts what it finds into
+                new sessions, skipping solves you already have.
               </p>
             </Section>
 
             <Section icon={<FolderSync className="size-3.5" aria-hidden="true" />} title="Saving">
               <p>
-                Every solve, session, setting and puzzle choice is saved in this browser as you go,
-                so the timer works with no account and no connection.
+                Everything is saved in this browser as you go, so the timer works with no account
+                and no connection.
               </p>
               <p>
-                Nothing is uploaded anywhere. Clearing site data, or Reset in the solves panel,
-                deletes the local copy for good — export first if you want to keep one.
+                Nothing is uploaded. Clearing site data or hitting Reset deletes the local copy for
+                good — export first if you want to keep it.
               </p>
             </Section>
           </>
@@ -319,8 +311,7 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
               ))}
             </ul>
             <p className="mt-4 text-[11.5px] leading-5 text-faint">
-              Space always drives the timer — it stops a solve even when a button has focus, and the
-              text fields in dialogs keep it for typing.
+              Any key stops a running solve, not just space. Text fields keep their keys for typing.
             </p>
           </section>
         ) : null}

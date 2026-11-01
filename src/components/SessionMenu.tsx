@@ -279,7 +279,7 @@ export function SessionMenu({
           )}
 
           <p className="mt-1 border-t border-white/[0.055] px-2 pb-1 pt-2 text-[10.5px] leading-4 text-faint">
-            Every event keeps its own sessions. Stats compare the open session with all of them.
+            Each event keeps its own sessions. Stats compare this one with the rest.
           </p>
         </div>
       ) : null}

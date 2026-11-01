@@ -87,7 +87,7 @@ export function StatsDialog({
       open={open}
       onClose={onClose}
       title="Statistics"
-      description="The open session, or every session of this event."
+      description="The open session, or the whole event."
       size="xl"
       titleSize="lg"
     >
@@ -207,8 +207,8 @@ export function StatsDialog({
               <Figure label="Best ao100" value={formatStat(stats.bestAo100)} />
             </div>
             <p className="text-[11.5px] leading-[1.6] text-faint">
-              Averages follow WCA trimming: the fastest and slowest of the window are dropped, a DNF
-              counts as the slowest, and two DNFs make the average a DNF.
+              WCA trimming: the fastest and slowest of each window are dropped, a DNF counts as the
+              slowest, and two DNFs make the average a DNF.
             </p>
           </>
         ) : null}
@@ -225,8 +225,8 @@ export function StatsDialog({
               <Figure label="Solves" value={String(stats.count)} hint={`${stats.dnfCount} DNF`} />
             </div>
             <p className="text-[11.5px] leading-[1.6] text-faint">
-              The solid line is every solve in the order you recorded them, the dashed line a
-              rolling mean of five. The green dot is the fastest solve in the window.
+              Solid: every solve in order. Dashed: rolling mean of five. The green dot is the
+              fastest.
             </p>
           </>
         ) : null}
@@ -247,8 +247,8 @@ export function StatsDialog({
               />
             </div>
             <p className="text-[11.5px] leading-[1.6] text-faint">
-              Each bar counts the solves that landed in that slice of time. A tight cluster on the
-              left with a long tail to the right is the usual shape.
+              Each bar counts the solves in that slice of time. A tight cluster with a long tail to
+              the right is the usual shape.
             </p>
           </>
         ) : null}
@@ -439,7 +439,7 @@ function SessionBrowser({
   if (sessions.length === 0) {
     return (
       <p className="rounded-xl border border-white/[0.055] bg-ink-950/30 px-3 py-6 text-center text-[12px] leading-5 text-faint">
-        No sessions yet. Starting one keeps the next solves apart from everything before them.
+        No sessions yet. Start one to keep the next solves separate.
       </p>
     );
   }
