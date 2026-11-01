@@ -99,17 +99,28 @@ export function TimerDisplay({
   // One scale value, so arming and focusing cannot fight over the transform.
   // Arming always happens while focused, so it only needs the armed step. That
   // step is deliberately small: a large one widened the ink past the layout
-  // box, which both clipped the digits and left a scrollbar. It only applies
-  // from `sm` up, because on a phone the digits already fill their column and
-  // any extra width there is what used to force a horizontal scrollbar.
+  // box, which both clipped the digits and left a scrollbar. A phone takes a
+  // smaller step than a desktop because its digits fill more of their column.
   const scale =
-    status === "ready" ? "scale-[1.045] sm:scale-[1.07]" : zoomed ? "sm:scale-[1.03]" : "";
+    status === "ready"
+      ? "scale-[1.045] sm:scale-[1.07]"
+      : zoomed
+        ? "scale-[1.02] sm:scale-[1.03]"
+        : "";
   // A time with a minutes field is three glyphs longer, so it steps down a size
   // rather than overflowing the column it sits in.
   const longValue = value.length >= 6;
 
   return (
-    <div className="relative flex w-full items-center justify-center select-none">
+    // The layout jump into focus mode cannot be transitioned — the header and
+    // panel are removed with `display: none` — so the digits fade in over the
+    // new frame instead of appearing with a hard cut.
+    <div
+      className={cn(
+        "relative flex w-full items-center justify-center select-none",
+        zoomed && "animate-fade-in",
+      )}
+    >
       {/* Out of the flow so the digits themselves sit dead centre. */}
       <span
         aria-hidden="true"
