@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { cn } from "../lib/cn";
+import { fitDigits } from "../lib/fit";
 import { formatTime } from "../lib/format";
 import type { TimerClock, TimerStatus } from "../hooks/useTimer";
 import type { Penalty } from "../lib/types";
@@ -107,9 +108,8 @@ export function TimerDisplay({
       : zoomed
         ? "scale-[1.02] sm:scale-[1.03]"
         : "";
-  // A time with a minutes field is three glyphs longer, so it steps down a size
-  // rather than overflowing the column it sits in.
-  const longValue = value.length >= 6;
+  // What is actually on screen, which is what the size has to fit.
+  const digits = hidden ? "solve" : value;
 
   return (
     // The layout jump into focus mode cannot be transitioned — the header and
@@ -159,21 +159,19 @@ export function TimerDisplay({
           // whole number drifts right of centre. The right padding hands that
           // trailing space back, which centres the ink instead of the box.
           "pr-[0.045em]",
-          // Container width sets the size, but a short window (a phone held in
-          // landscape) caps it by height so the digits can never outgrow the screen.
           "transition-[color,scale] duration-150 ease-out",
-          // The `cqw` ratios are the ones that were tuned to fit the longest
-          // string the class allows; the rem ceiling is what can grow. A wider
-          // timer column (and the panel collapsing during a solve) therefore
-          // makes the digits bigger without ever pushing them out of their box.
-          longValue
-            ? "text-[clamp(4.4rem,min(26.4cqw,33svh),16rem)] sm:text-[clamp(4.15rem,min(25.4cqw,33svh),16rem)]"
-            : "text-[clamp(5.4rem,min(30.8cqw,37svh),18rem)] sm:text-[clamp(4.9rem,min(28.9cqw,37svh),18rem)]",
           scale,
           tone,
         )}
+        // Measured from the stage and from how many glyphs the number has, so a
+        // time that runs into the hours (or further) shrinks until it fits
+        // instead of spilling out of the column. The caps are what a short time
+        // grows to: the rem ceiling, 36svh so a short window (a phone in
+        // landscape) cannot outgrow the screen, and 30cqw, the ratio tuned to
+        // fit a time with a minutes field.
+        style={{ fontSize: fitDigits(digits, { max: "min(18rem, 36svh, 30cqw)" }) }}
       >
-        <span className={cn(hidden && "text-ink-500")}>{hidden ? "solve" : value}</span>
+        <span className={cn(hidden && "text-ink-500")}>{digits}</span>
       </div>
     </div>
   );

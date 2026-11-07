@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { Check, Timer, Trash2 } from "lucide-react";
 import { cn } from "../lib/cn";
 import { effectiveMs } from "../lib/stats";
+import { fitDigits } from "../lib/fit";
 import { formatDateTime, formatTime } from "../lib/format";
 import type { Penalty, Solve } from "../lib/types";
 
@@ -176,7 +177,7 @@ export const SolveList = memo(function SolveList({
                       }
                       setExpanded(showScramble ? null : solve.id);
                     }}
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-1 text-left transition-colors pointer-coarse:gap-2.5 pointer-coarse:py-2 pointer-coarse:pl-2 sm:gap-2.5 sm:pl-2"
+                    className="@container flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-1 text-left transition-colors pointer-coarse:gap-2.5 pointer-coarse:py-2 pointer-coarse:pl-2 sm:gap-2.5 sm:pl-2"
                   >
                     {selecting ? (
                       <span
@@ -195,13 +196,24 @@ export const SolveList = memo(function SolveList({
                         {number}
                       </span>
                     )}
+                    {/* The digits take whatever the row has left after the
+                        number and the penalty badge, however long the time. */}
                     <span
                       className={cn(
-                        "font-mono text-[15px] tabular-nums tracking-[-0.02em]",
+                        "font-mono text-[15px] tabular-nums tracking-[-0.02em] whitespace-nowrap",
                         isDnf ? "text-bad" : isPlus2 ? "text-warn" : "text-chalk",
                       )}
                     >
-                      {formatTime(value)}
+                      <span
+                        style={{
+                          fontSize: fitDigits(formatTime(value), {
+                            reserve: isPlus2 ? 84 : 60,
+                            max: "1em",
+                          }),
+                        }}
+                      >
+                        {formatTime(value)}
+                      </span>
                     </span>
                     {isPlus2 ? (
                       <span className="rounded-[4px] border border-warn/25 bg-warn/10 px-1 py-px font-mono text-[9px] uppercase leading-[1.35] tracking-wide text-warn">

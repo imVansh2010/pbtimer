@@ -21,6 +21,35 @@ export function formatStat(value: number | null): string {
   return formatTime(value);
 }
 
+/**
+ * Reads a time typed into the timer field. A dot means seconds (12.34), a
+ * colon means minutes and seconds (1:02.55), and bare digits are milliseconds,
+ * the way a stackmat shows them. Rounded to the hundredth the app records,
+ * or null when the text is not a time.
+ */
+export function parseTypedTime(input: string): number | null {
+  const text = input.trim();
+  if (text === "") return null;
+
+  let ms: number;
+
+  if (text.includes(":")) {
+    const match = /^(\d+):(\d+(?:\.\d*)?)$/.exec(text);
+    if (!match) return null;
+    ms = (Number(match[1]) * 60 + Number(match[2])) * 1000;
+  } else if (text.includes(".")) {
+    if (text === "." || !/^\d*\.\d*$/.test(text)) return null;
+    ms = Number(text) * 1000;
+  } else {
+    if (!/^\d+$/.test(text)) return null;
+    ms = Number(text);
+  }
+
+  const rounded = Math.round(ms / 10) * 10;
+  if (!Number.isFinite(rounded) || rounded <= 0) return null;
+  return rounded;
+}
+
 /** Full time including thousandths, used in the text export. */
 export function formatPreciseTime(ms: number): string {
   if (!Number.isFinite(ms)) return "DNF";

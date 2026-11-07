@@ -4,6 +4,7 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Segmented } from "../ui/Segmented";
 import { cn } from "../../lib/cn";
+import { fitDigits } from "../../lib/fit";
 import { formatDate, formatStat, formatTime, formatTotalTime } from "../../lib/format";
 import {
   computeStats,
@@ -601,15 +602,15 @@ function SessionRow({
 
 function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-white/[0.055] bg-ink-950/40 px-2.5 py-2 sm:px-3 sm:py-2.5">
+    <div className="@container rounded-xl border border-white/[0.055] bg-ink-950/40 px-2.5 py-2 sm:px-3 sm:py-2.5">
       <div className="text-[10px] uppercase tracking-[0.12em] text-faint">{label}</div>
       <div
         className={cn(
-          "mt-1 font-mono text-[15px] tabular-nums",
+          "mt-1 font-mono text-[15px] tabular-nums whitespace-nowrap",
           value === "DNF" ? "text-bad" : "text-chalk",
         )}
       >
-        {value}
+        <span style={{ fontSize: fitDigits(value, { max: "1em" }) }}>{value}</span>
       </div>
       {hint ? <div className="mt-0.5 text-[10px] text-faint/80">{hint}</div> : null}
     </div>

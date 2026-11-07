@@ -13,6 +13,8 @@ import type { Settings } from "../../lib/types";
 interface SettingsDialogProps {
   open: boolean;
   settings: Settings;
+  /** False on touch screens, where there is no keyboard to type a time on. */
+  typeInAvailable: boolean;
   onChange: (patch: Partial<Settings>) => void;
   onClose: () => void;
   onExport: () => void;
@@ -43,6 +45,7 @@ const SHORTCUTS: Array<{ keys: string[]; action: string }> = [
 export function SettingsDialog({
   open,
   settings,
+  typeInAvailable,
   onChange,
   onClose,
   onExport,
@@ -215,6 +218,14 @@ export function SettingsDialog({
 
         {tab === "timer" ? (
           <section className="divide-y divide-white/[0.05]">
+            {typeInAvailable ? (
+              <Toggle
+                label="Type your time in"
+                description="Type a time and press Enter. Bare digits count as milliseconds."
+                checked={settings.typeInTime}
+                onChange={(typeInTime) => onChange({ typeInTime })}
+              />
+            ) : null}
             <Toggle
               label="WCA inspection"
               description="15-second countdown before each solve. Over 15s is +2, over 17s a DNF."

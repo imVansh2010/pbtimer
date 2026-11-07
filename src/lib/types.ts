@@ -55,6 +55,8 @@ export interface Settings {
   holdMs: number;
   /** Keep the digits blank while the timer runs. */
   hideRunningTime: boolean;
+  /** Replace the timer with a field you type a time into (desktop only). */
+  typeInTime: boolean;
   /** Accent palette id from `lib/accents`. */
   accent: string;
 }

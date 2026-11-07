@@ -1,6 +1,7 @@
 import { memo, useId } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { formatStat } from "../lib/format";
+import { fitDigits } from "../lib/fit";
 import type { SessionStats } from "../lib/stats";
 import { cn } from "../lib/cn";
 
@@ -19,17 +20,19 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub: st
   const dnf = value === "DNF";
   const hasSub = sub !== "—";
   return (
-    <div className="panel rounded-xl border border-white/[0.055] bg-ink-900/70 px-2.5 py-2 sm:px-3 sm:py-2.5">
+    <div className="panel @container rounded-xl border border-white/[0.055] bg-ink-900/70 px-2.5 py-2 sm:px-3 sm:py-2.5">
       <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-faint">
         {label}
       </span>
+      {/* Sized against the card rather than fixed, so a long average steps down
+          instead of running over the edge of its tile. */}
       <div
         className={cn(
-          "mt-1.5 font-mono text-[21px] leading-none tabular-nums tracking-[-0.02em] sm:text-[23px]",
+          "mt-1.5 font-mono text-[21px] leading-none tabular-nums tracking-[-0.02em] whitespace-nowrap sm:text-[23px]",
           dnf ? "text-bad" : "text-chalk",
         )}
       >
-        {value}
+        <span style={{ fontSize: fitDigits(value, { max: "1em" }) }}>{value}</span>
       </div>
       <div className="mt-2 truncate text-[10px] text-faint">
         best <span className={hasSub ? "text-accent" : "text-muted"}>{sub}</span>
@@ -92,15 +95,15 @@ export const StatsPanel = memo(function StatsPanel({
 
 function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="flex min-w-0 flex-col items-center justify-center px-1.5 py-1.5 text-center sm:px-2 sm:py-2">
+    <div className="@container flex min-w-0 flex-col items-center justify-center px-1.5 py-1.5 text-center sm:px-2 sm:py-2">
       <div className="text-[9.5px] uppercase tracking-[0.14em] text-faint">{label}</div>
       <div
         className={cn(
-          "mt-1 truncate font-mono text-[12.5px] tabular-nums sm:text-[13.5px]",
+          "mt-1 w-full font-mono text-[12.5px] tabular-nums whitespace-nowrap sm:text-[13.5px]",
           value === "DNF" ? "text-bad" : "text-chalk-dim",
         )}
       >
-        {value}
+        <span style={{ fontSize: fitDigits(value, { max: "1em" }) }}>{value}</span>
       </div>
       {/* Always drawn so all three values share one baseline, with or without a DNF count. */}
       <div className="mt-0.5 text-[9px] leading-[1.2] text-faint">{sub ?? "\u00a0"}</div>

@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: Settings = {
   inspection: true,
   holdMs: 300,
   hideRunningTime: false,
+  typeInTime: false,
   accent: DEFAULT_ACCENT,
 };
 
@@ -24,6 +25,7 @@ export function sanitizeSettings(value: unknown): Settings {
         ? input.holdMs
         : DEFAULT_SETTINGS.holdMs,
     hideRunningTime: input.hideRunningTime === true,
+    typeInTime: input.typeInTime === true,
     accent: isAccentId(input.accent) ? input.accent : DEFAULT_SETTINGS.accent,
   };
 }

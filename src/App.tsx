@@ -21,6 +21,7 @@ import { PuzzleSelect } from "./components/PuzzleSelect";
 import { SessionMenu } from "./components/SessionMenu";
 import { ScrambleBar } from "./components/ScrambleBar";
 import { TimerDisplay } from "./components/TimerDisplay";
+import { TypeInTimer } from "./components/TypeInTimer";
 import { CubeNet, supportsNet } from "./components/CubeNet";
 import { PbNotice } from "./components/PbNotice";
 import { StatsPanel } from "./components/StatsPanel";
@@ -170,6 +171,8 @@ export default function App() {
     return clampPanel(typeof stored === "number" && Number.isFinite(stored) ? stored : fallback);
   });
   const resizeFrom = useRef<{ x: number; width: number } | null>(null);
+  /** The typed-time field, so a click anywhere on the stage can refocus it. */
+  const typedTimeInput = useRef<HTMLInputElement>(null);
   /** True while a press that started on the stage is still waiting for its up. */
   const stagePress = useRef(false);
 
@@ -358,12 +361,27 @@ export default function App() {
     [activeSession, findPersonalBest, sessions, puzzle, scramble, nextScramble, solveSaved],
   );
 
+  /** A typed time is a clean solve; the parser has already rounded it. */
+  const recordTypedSolve = useCallback(
+    (ms: number) => handleComplete({ ms, penalty: "ok" }),
+    [handleComplete],
+  );
+
   const modalOpen = dialog !== null || confirmation !== null;
+
+  const touch = useSyncExternalStore(subscribePointer, readCoarsePointer, () => false);
+
+  /**
+   * Typed times replace the clock on a desktop. A touch screen has no keyboard
+   * to type on, so the option is ignored there even when it arrives turned on
+   * from another device.
+   */
+  const typedMode = settings.typeInTime && !touch;
 
   const timer = useTimer({
     inspection: settings.inspection,
     holdMs: settings.holdMs,
-    active: !modalOpen,
+    active: !modalOpen && !typedMode,
     onSolveComplete: handleComplete,
   });
   const { cancelInspection } = timer;
@@ -395,6 +413,13 @@ export default function App() {
   useEffect(() => {
     if (focusing) setDeletedSettled(false);
   }, [focusing]);
+
+  // The typed-time field is the timer, so it holds focus unless a dialog owns
+  // it; clicking anywhere on the stage puts the caret back.
+  useEffect(() => {
+    if (!typedMode || modalOpen) return;
+    typedTimeInput.current?.focus();
+  }, [typedMode, modalOpen]);
 
   const exportText = useMemo(
     () => (dialog === "export" ? buildExportText(sessions, solves) : ""),
@@ -635,9 +660,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [modalOpen, lastSolve, focusing, nextScramble, applyPenalty, deleteSolve, cancelInspection]);
 
-  const touch = useSyncExternalStore(subscribePointer, readCoarsePointer, () => false);
-
   const hint = (() => {
+    if (typedMode) return "Type a time, then press Enter";
     if (timer.inspecting) {
       if (timer.status === "ready") return "Release to start the solve";
       return touch ? "Hold until the timer turns green" : "Hold space until the timer turns green";
@@ -694,6 +718,13 @@ export default function App() {
    */
   function onStagePointerDown(event: ReactPointerEvent<HTMLElement>) {
     if (event.button !== 0) return;
+
+    // The typing field owns the stage: a press only puts the caret back, and
+    // must never arm the clock that is not on screen.
+    if (typedMode) {
+      typedTimeInput.current?.focus();
+      return;
+    }
 
     const target = event.target;
     if (
@@ -828,19 +859,32 @@ export default function App() {
               focusing && "relative z-10 flex-1 py-0",
             )}
           >
-            <div className="w-full max-w-[1100px] cursor-pointer rounded-2xl px-2 py-3 @container">
-              <TimerDisplay
-                status={timer.status}
-                elapsed={timer.elapsed}
-                clock={timer.clock}
-                inspecting={timer.inspecting}
-                inspectionLeft={timer.inspectionLeft}
-                hideRunningTime={settings.hideRunningTime}
-                inspectionEnabled={settings.inspection}
-                penalty={settledPenalty}
-                zoomed={focusing}
-                deleted={deletedSettled}
-              />
+            <div
+              className={cn(
+                "w-full max-w-[1100px] rounded-2xl px-2 py-3 @container",
+                typedMode ? "cursor-text" : "cursor-pointer",
+              )}
+            >
+              {typedMode ? (
+                <TypeInTimer
+                  inputRef={typedTimeInput}
+                  onSubmit={recordTypedSolve}
+                  disabled={modalOpen}
+                />
+              ) : (
+                <TimerDisplay
+                  status={timer.status}
+                  elapsed={timer.elapsed}
+                  clock={timer.clock}
+                  inspecting={timer.inspecting}
+                  inspectionLeft={timer.inspectionLeft}
+                  hideRunningTime={settings.hideRunningTime}
+                  inspectionEnabled={settings.inspection}
+                  penalty={settledPenalty}
+                  zoomed={focusing}
+                  deleted={deletedSettled}
+                />
+              )}
             </div>
           </div>
 
@@ -884,7 +928,11 @@ export default function App() {
             {/* A phone drives the timer by touch, so the keyboard hint is just
                 a line of text eating the vertical space the digits want. */}
             <p className="hidden h-5 items-center gap-2 text-[11px] text-faint transition-opacity duration-200 sm:flex">
-              {touch ? null : <kbd className="kbd">space</kbd>}
+              {touch ? null : typedMode ? (
+                <kbd className="kbd">enter</kbd>
+              ) : (
+                <kbd className="kbd">space</kbd>
+              )}
               <span>{hint}</span>
             </p>
           </div>
@@ -960,6 +1008,7 @@ export default function App() {
       <SettingsDialog
         open={dialog === "settings"}
         settings={settings}
+        typeInAvailable={!touch}
         onChange={updateSettings}
         onClose={() => setDialog(null)}
         onExport={() => openDialog("export")}
